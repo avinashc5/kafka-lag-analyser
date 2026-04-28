@@ -8,6 +8,10 @@ services:
     ports:
       - "9092:9092"
       - "9093:9093"
+      - "9999:9999"
+    environment:
+      - JMX_PORT=9999
+      - KAFKA_JMX_OPTS=-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=kafka -Dcom.sun.management.jmxremote.rmi.port=9999
     # environment:
     #   KAFKA_NODE_ID: 1
     #   KAFKA_PROCESS_ROLES: broker,controller
@@ -34,3 +38,20 @@ services:
     container_name: consumer
     depends_on:
       - kafka
+
+  analyser:
+    build:
+      context: .
+      dockerfile: analyser/Dockerfile
+    container_name: analyser
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - JMX_HOST=kafka
+      - JMX_PORT=9999
+      - GROUP_ID=group1
+      - TOPIC=test-topic
+      - CONNECT_RETRY_MS=3000
+      - POLL_INTERVAL_MS=5000
