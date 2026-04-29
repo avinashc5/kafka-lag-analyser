@@ -1,9 +1,11 @@
-joblib==1.5.3
+joblib
 kafka-python==2.3.0
-numpy==2.4.4
+numpy
 nvidia-nccl-cu12==2.29.7
 pandas==3.0.2
+prometheus-client==0.21.1
 python-dateutil==2.9.0.post0
+requests==2.32.3
 scikit-learn==1.8.0
 scipy==1.17.1
 six==1.17.0

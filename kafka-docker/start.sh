@@ -11,4 +11,8 @@ if [ ! -f "$LOG_DIR/meta.properties" ]; then
         -c config/server.properties
 fi
 
+# Attach the Prometheus JMX Exporter agent so the scraper can read metrics.
+# Port 9101 is the HTTP endpoint that serves /metrics in Prometheus text format.
+export KAFKA_OPTS="$KAFKA_OPTS -javaagent:/kafka/jmx_prometheus_javaagent.jar=9101:/kafka/jmx_exporter.yml"
+
 bin/kafka-server-start.sh config/server.properties
