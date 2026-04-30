@@ -14,7 +14,7 @@ services:
       context: ./producer
       network: host
     ports:
-      - "5001:5000"
+      - "6001:5000"
     depends_on:
       - kafka
 
