@@ -5,4 +5,4 @@ COPY . /app
 
 RUN pip install kafka-python
 
-CMD ["python", "consumer.py"]
+CMD ["python3", "-u", "consumer.py"]

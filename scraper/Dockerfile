@@ -11,4 +11,4 @@ COPY . /app/scraper
 RUN pip install -r /app/scraper/requirements.txt
 
 # Run the scraper
-CMD ["python", "-m", "scraper.run"]
+CMD ["python3", "-m", "scraper.run"]
