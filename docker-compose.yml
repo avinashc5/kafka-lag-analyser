@@ -42,5 +42,6 @@ services:
     container_name: scraper
     volumes:
       - ./scraper:/app/scraper
+      - ./data:/app/data
     depends_on:
       - kafka

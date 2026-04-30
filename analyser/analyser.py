@@ -7,10 +7,8 @@ from pathlib import Path
 import pickle
 
 import pandas as pd
-import uvicorn
-import xgboost as xgb
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 # We import the extraction logic from the ml directory.
@@ -46,42 +44,43 @@ last_processed_scrape_id = -1
 
 # ── Database query helpers ─────────────────────────────────────────────────────
 
-def load_recent_data(db_path: Path, last_n: int = WINDOW + 1) -> tuple:
+def load_recent_data(db_path: Path, last_n: int = WINDOW * 2) -> tuple:
     """
     Fetch the last `last_n` scrapes from the metrics DB.
-    We need `WINDOW` recent scrapes so the rolling features (slopes, std) compute correctly.
+    We fetch WINDOW*2 scrapes so rolling features (slopes, std) over the most
+    recent WINDOW points have a full window of prior context to work from.
     """
     if not db_path.exists():
         return None, pd.DataFrame(), pd.DataFrame()
 
-    conn = sqlite3.connect(db_path)
+    with sqlite3.connect(db_path) as conn:
+        # Get recent sessions
+        sessions = pd.read_sql(
+            "SELECT id FROM scrape_sessions ORDER BY id DESC LIMIT ?",
+            conn,
+            params=(last_n,),
+        )
+        if sessions.empty:
+            return None, pd.DataFrame(), pd.DataFrame()
 
-    # Get recent sessions
-    sessions = pd.read_sql(
-        f"SELECT id FROM scrape_sessions ORDER BY id DESC LIMIT {last_n}",
-        conn
-    )
-    if sessions.empty:
-        conn.close()
-        return None, pd.DataFrame(), pd.DataFrame()
+        sessions = sessions.sort_values("id")  # sort chronologically
+        scrape_ids = sessions["id"].tolist()
+        placeholders = ",".join("?" * len(scrape_ids))
 
-    sessions = sessions.sort_values("id")  # sort chronologically
-    scrape_ids = sessions["id"].tolist()
-    scrape_ids_str = ",".join(map(str, scrape_ids))
-
-    # Fetch related JMX and LAG data
-    jmx_raw = pd.read_sql(
-        f"SELECT scrape_id, metric_name, value, labels FROM jmx_samples "
-        f"WHERE scrape_id IN ({scrape_ids_str})",
-        conn,
-    )
-    lag = pd.read_sql(
-        f"SELECT scrape_id, group_id, topic, partition, "
-        f"committed_offset, log_end_offset, lag, group_state "
-        f"FROM group_lag_samples WHERE scrape_id IN ({scrape_ids_str})",
-        conn,
-    )
-    conn.close()
+        # Fetch related JMX and LAG data
+        jmx_raw = pd.read_sql(
+            f"SELECT scrape_id, metric_name, value, labels FROM jmx_samples "
+            f"WHERE scrape_id IN ({placeholders})",
+            conn,
+            params=scrape_ids,
+        )
+        lag = pd.read_sql(
+            f"SELECT scrape_id, group_id, topic, partition, "
+            f"committed_offset, log_end_offset, lag, group_state "
+            f"FROM group_lag_samples WHERE scrape_id IN ({placeholders})",
+            conn,
+            params=scrape_ids,
+        )
 
     if jmx_raw.empty and lag.empty:
         return None, pd.DataFrame(), pd.DataFrame()
@@ -128,10 +127,9 @@ async def inference_loop():
                 continue
 
             # Quick check if there's a new scrape
-            conn = sqlite3.connect(DB_PATH)
-            cur = conn.execute("SELECT MAX(id) FROM scrape_sessions")
-            row = cur.fetchone()
-            conn.close()
+            with sqlite3.connect(DB_PATH) as conn:
+                cur = conn.execute("SELECT MAX(id) FROM scrape_sessions")
+                row = cur.fetchone()
             latest_id = row[0] if row else None
 
             if latest_id is None or latest_id <= last_processed_scrape_id:
@@ -243,7 +241,6 @@ async def get_faults():
     }
 
 # Mount the static directory
-from fastapi.staticfiles import StaticFiles
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 @app.get("/", response_class=HTMLResponse)
