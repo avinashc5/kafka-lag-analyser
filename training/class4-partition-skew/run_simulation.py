@@ -1,53 +1,47 @@
 import subprocess
 import time
 import csv
+import requests
 import os
 import sqlite3
 from datetime import datetime, timezone
 
+PRODUCER = "http://localhost:5001/setState"
+
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
-def set_network_delay(container, delay="200ms", enable=True):
-    if enable:
-        print(f"[*] Adding {delay} delay to {container}")
-        # Ignore error if already added
-        subprocess.run(["docker", "compose", "exec", "-t", container, "tc", "qdisc", "add", "dev", "eth0", "root", "netem", "delay", delay], capture_output=True)
-    else:
-        print(f"[*] Removing delay from {container}")
-        subprocess.run(["docker", "compose", "exec", "-t", container, "tc", "qdisc", "del", "dev", "eth0", "root", "netem"], capture_output=True)
+def set_producer_state(fault_mode="healthy"):
+    try:
+        requests.post(PRODUCER, json={"fault_mode": fault_mode}, timeout=2)
+    except Exception as e:
+        print(f"Warning: Failed to reach {PRODUCER}: {e}")
 
 def main():
-    print("Starting simulation framework for Class 3 (Network Degradation)....")
+    print("Starting simulation framework for Class 4 (Partition Skew)....")
 
     subprocess.run(["docker", "compose", "up", "-d", "--build"], check=True)
-    print("Waiting 30 seconds for cluster, producer, and consumer to warm up...")
+    print("Waiting 30 seconds for Kafka, Producer, and Consumers to warm up...")
     time.sleep(30)
 
     phases = []
-    cycles = 2
     duration_per_phase = 10 * 60
 
-    for cycle in range(cycles):
-        print(f"\n--- Starting Cycle {cycle+1}/{cycles} ---")
+    # Use just ONE cycle because size_cv (accumulated size skew) does not naturally
+    # revert cleanly to a healthy threshold after a heavy skew phase.
+    print(f"\n--- Starting 1-Cycle Run ---")
 
-        print("[*] Entering Healthy State")
-        set_network_delay("kafka2", enable=False)
-        set_network_delay("consumer", enable=False)
-        set_network_delay("producer", enable=False)
-        start_time = utc_now()
-        time.sleep(duration_per_phase)
-        phases.append((start_time, utc_now(), "healthy", "none"))
+    print("[*] Entering Healthy State")
+    set_producer_state(fault_mode="healthy")
+    start_time = utc_now()
+    time.sleep(duration_per_phase)
+    phases.append((start_time, utc_now(), "healthy", "none"))
 
-        print("[*] Entering Fault State: Network Degradation")
-        # Spike inter-broker latency (affects replication lag & remote produce time)
-        set_network_delay("kafka2", delay="400ms", enable=True)
-        # Spike client->broker latency (affects fetch and produce total time)
-        set_network_delay("consumer", delay="200ms", enable=True)
-        set_network_delay("producer", delay="200ms", enable=True)
-        start_time = utc_now()
-        time.sleep(duration_per_phase)
-        phases.append((start_time, utc_now(), "fault", "network_degradation"))
+    print("[*] Entering Fault State: Partition Skew")
+    set_producer_state(fault_mode="partition_skew")
+    start_time = utc_now()
+    time.sleep(duration_per_phase)
+    phases.append((start_time, utc_now(), "fault", "partition_skew"))
 
     print("\nSimulation complete. Shutting down environment...")
 
@@ -79,7 +73,7 @@ def main():
                     if start <= s_time <= end:
                         current_label = fault_cause if fault_cause != "none" else "healthy"
                         break
-                if not (current_label == "unknown"):
+                if not current_label == "unknown":
                     writer.writerow([s_id, current_label])
         print("labels.csv generated successfully.")
     except Exception as e:
