@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from kafka import KafkaAdminClient, KafkaConsumer, TopicPartition
 from kafka.errors import KafkaError
 
+# Kafka's own housekeeping topics — not relevant to application lag classification.
+_INTERNAL_TOPICS = {"__consumer_offsets", "__cluster_metadata", "__transaction_state"}
+
 
 @dataclass
 class GroupLagSample:
@@ -76,6 +79,8 @@ class AdminCollector:
 
         samples = []
         for tp, offset_meta in committed.items():
+            if tp.topic in _INTERNAL_TOPICS:
+                continue
             committed_offset = offset_meta.offset if offset_meta else 0
             log_end_offset   = end_offsets.get(tp, committed_offset)
             samples.append(GroupLagSample(

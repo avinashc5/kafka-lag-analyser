@@ -15,6 +15,12 @@ lowercaseOutputLabelNames: true
 
 rules:
 
+  # ── Drop all metrics for Kafka's internal topics ───────────────────────────
+  # These must come first; the JMX Exporter applies rules in order and stops at
+  # the first match.  An empty `name` with no `value` drops the metric entirely.
+  - pattern: "kafka\\..*topic=(__consumer_offsets|__cluster_metadata|__transaction_state).*"
+    name: ""
+
   # ── Throughput: per-topic BytesIn / BytesOut / MessagesIn / ReplicationBytesOut ──
   # Produces: kafka_server_brokertopicmetrics_<name>_oneminuterate{topic="..."}
   - pattern: "kafka.server<type=BrokerTopicMetrics, name=(BytesInPerSec|BytesOutPerSec|MessagesInPerSec|ReplicationBytesOutPerSec), topic=(.+)><>OneMinuteRate"
