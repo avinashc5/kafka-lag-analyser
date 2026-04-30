@@ -1,4 +1,5 @@
-"""Feature extractors for each fault model.
+"""
+Feature extractors for each fault model.
 
 Each extractor returns a DataFrame whose first columns identify the entity
 (scrape_id + optional group_id / topic) and whose remaining columns are the
@@ -41,7 +42,7 @@ def _safe_cv(arr: np.ndarray) -> float:
 
 def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
     """
-    Per (scrape_id, group_id).
+    Per (scrape_id, group_id, partition).
 
     Features
     --------
@@ -50,20 +51,20 @@ def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
     lag_delta_std          : rolling std of lag changes (erratic vs sustained growth)
     lag_normalized         : total_lag / broker-wide msgs_in_per_sec
     committed_delta_rate   : rolling mean of Δcommitted_offset (processing throughput proxy)
-    stable_frac            : fraction of partitions in Stable state
+    # stable_frac            : fraction of partitions in Stable state
     lag_max_jump           : largest single-step lag increase in window
     """
     W = WINDOW
 
     grp = (
-        lag.groupby(["scrape_id", "group_id"])
+        lag.groupby(["scrape_id", "group_id", "partition"])
         .agg(
             total_lag=("lag", "sum"),
             total_committed=("committed_offset", "sum"),
             stable_frac=("group_state", lambda s: (s == "Stable").mean()),
         )
         .reset_index()
-        .sort_values(["group_id", "scrape_id"])
+        .sort_values(["group_id", "partition", "scrape_id"])
     )
 
     def group_roll(df: pd.DataFrame) -> pd.DataFrame:
@@ -76,7 +77,7 @@ def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
         df["lag_max_jump"] = df["lag_delta"].rolling(W, min_periods=1).max()
         return df
 
-    grp = grp.groupby("group_id", group_keys=False).apply(group_roll)
+    grp = grp.groupby(["group_id", "partition"], group_keys=False).apply(group_roll)
 
     # Broker-wide msgs_in for normalisation
     msgs_in = (
@@ -92,82 +93,11 @@ def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
     grp["lag_normalized"] = grp["total_lag"] / grp["msgs_in_total"].replace(0, np.nan)
 
     cols = [
-        "scrape_id", "group_id",
+        "scrape_id", "group_id", "partition",
         "total_lag", "lag_growth_slope", "lag_delta_std",
         "lag_normalized", "committed_delta_rate", "stable_frac", "lag_max_jump",
     ]
     return grp[cols].fillna(0)
-
-
-# ── 2. commit_failure ────────────────────────────────────────────────────────
-
-
-def extract_commit_failure(lag: pd.DataFrame) -> pd.DataFrame:
-    """
-    Per (scrape_id, group_id).
-
-    Features
-    --------
-    committed_delta_rate  : rolling mean of Δcommitted_offset (→ 0 when commits stall)
-    stale_streak          : scrapes in window where committed_offset didn't move but LEO did
-    lag_max_jump          : max single-step lag spike (uncommitted replay signature)
-    lag_nonmono_count     : times lag decreased then spiked back up (process→fail→replay)
-    lag_std               : rolling std of lag (high = phantom lag / erratic commits)
-    dead_frac_window      : fraction of window scrapes where group state was Dead/Empty
-    commit_to_leo_ratio   : Δcommitted / Δleo — drops to 0 when commits stall
-    """
-    W = WINDOW
-
-    grp = (
-        lag.groupby(["scrape_id", "group_id"])
-        .agg(
-            total_lag=("lag", "sum"),
-            total_committed=("committed_offset", "sum"),
-            total_leo=("log_end_offset", "sum"),
-            dead_frac=("group_state", lambda s: s.isin(["Dead", "Empty"]).mean()),
-        )
-        .reset_index()
-        .sort_values(["group_id", "scrape_id"])
-    )
-
-    def group_roll(df: pd.DataFrame) -> pd.DataFrame:
-        df = df.sort_values("scrape_id").copy()
-        df["committed_delta"] = df["total_committed"].diff()
-        df["leo_delta"] = df["total_leo"].diff()
-        df["lag_delta"] = df["total_lag"].diff()
-
-        # Staleness: committed didn't move but LEO did
-        stale = (df["committed_delta"] == 0) & (df["leo_delta"] > 0)
-        df["stale_streak"] = stale.rolling(W, min_periods=1).sum()
-
-        # Lag jump
-        df["lag_max_jump"] = df["lag_delta"].rolling(W, min_periods=1).max()
-
-        # Non-monotonicity: lag fell then rose again
-        fell_then_rose = (df["lag_delta"] < 0) & (df["lag_delta"].shift(-1) > 0)
-        df["lag_nonmono_count"] = fell_then_rose.rolling(W, min_periods=1).sum()
-
-        # Lag std
-        df["lag_std"] = df["total_lag"].rolling(W, min_periods=2).std()
-
-        # Dead/Empty frequency in window
-        df["dead_frac_window"] = df["dead_frac"].rolling(W, min_periods=1).mean()
-
-        # commit-to-LEO ratio
-        df["commit_to_leo_ratio"] = df["committed_delta"] / df["leo_delta"].replace(0, np.nan)
-
-        df["committed_delta_rate"] = df["committed_delta"].rolling(W, min_periods=1).mean()
-        return df
-
-    grp = grp.groupby("group_id", group_keys=False).apply(group_roll)
-
-    cols = [
-        "scrape_id", "group_id",
-        "committed_delta_rate", "stale_streak", "lag_max_jump",
-        "lag_nonmono_count", "lag_std", "dead_frac_window", "commit_to_leo_ratio",
-    ]
-    return grp[cols].fillna(0)
-
 
 # ── 3. rebalance_loops ───────────────────────────────────────────────────────
 
@@ -265,7 +195,6 @@ def extract_rebalance_loops(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFram
 
 
 # ── 4. partition_skew ────────────────────────────────────────────────────────
-
 
 def extract_partition_skew(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
     """

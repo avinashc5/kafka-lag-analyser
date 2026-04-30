@@ -20,8 +20,7 @@ from sklearn.utils.class_weight import compute_sample_weight
 from .data import FAULT_CLASSES, MODELS_DIR, TRAINING_DIR, load_fault_data
 from .features import (
     extract_broker_saturation,
-    extract_commit_failure,
-    extract_network_delay,
+    extract_network_degradation,
     extract_partition_skew,
     extract_rebalance_loops,
     extract_slow_consumer,
@@ -30,12 +29,11 @@ from .features import (
 # ── Entity keys (columns that identify each training row, not features) ────────
 
 ENTITY_KEYS: dict[str, list[str]] = {
-    "slow_consumer":    ["scrape_id", "group_id"],
-    "commit_failure":   ["scrape_id", "group_id"],
+    "slow_consumer":    ["scrape_id", "group_id", "partition"],
     "rebalance_loops":  ["scrape_id", "group_id"],
     "partition_skew":   ["scrape_id", "topic"],
     "broker_saturation": ["scrape_id"],
-    "network_delay":    ["scrape_id"],
+    "network_degradation":    ["scrape_id"],
 }
 
 # ── Feature extraction dispatch ────────────────────────────────────────────────
@@ -44,16 +42,14 @@ ENTITY_KEYS: dict[str, list[str]] = {
 def _extract(fault_class: str, jmx: pd.DataFrame, lag: pd.DataFrame, sessions: pd.DataFrame) -> pd.DataFrame:
     if fault_class == "slow_consumer":
         return extract_slow_consumer(jmx, lag)
-    if fault_class == "commit_failure":
-        return extract_commit_failure(lag)
     if fault_class == "rebalance_loops":
         return extract_rebalance_loops(jmx, lag)
     if fault_class == "partition_skew":
         return extract_partition_skew(jmx, lag)
     if fault_class == "broker_saturation":
         return extract_broker_saturation(jmx, sessions)
-    if fault_class == "network_delay":
-        return extract_network_delay(jmx, sessions)
+    if fault_class == "network_degradation":
+        return extract_network_degradation(jmx, sessions)
     raise ValueError(f"Unknown fault class: {fault_class!r}")
 
 
