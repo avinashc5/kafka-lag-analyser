@@ -1,10 +1,9 @@
-version: '3.8'
-
 services:
   kafka:
     build:
       context: ../../
       dockerfile: training/class3-network-degradation/broker/Dockerfile
+      network: host
     command: ["bash", "./start_custom.sh", "server1.properties"]
     volumes:
       - ./broker/start_custom.sh:/kafka/start_custom.sh
@@ -19,6 +18,7 @@ services:
     build:
       context: ../../
       dockerfile: training/class3-network-degradation/broker/Dockerfile
+      network: host
     command: ["bash", "./start_custom.sh", "server2.properties"]
     volumes:
       - ./broker/start_custom.sh:/kafka/start_custom.sh
@@ -32,6 +32,7 @@ services:
   producer:
     build:
       context: ./producer
+      network: host
     depends_on:
       - kafka
       - kafka2
@@ -41,6 +42,7 @@ services:
   consumer:
     build:
       context: ./consumer
+      network: host
     depends_on:
       - kafka
       - kafka2
@@ -50,5 +52,6 @@ services:
   scraper:
     build:
       context: ../../scraper
+      network: host
     depends_on:
       - kafka
