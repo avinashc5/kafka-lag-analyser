@@ -8,7 +8,6 @@ features.  All numeric columns are filled with 0 where data is absent.
 Entity granularities
 --------------------
 slow_consumer     → (scrape_id, group_id)
-commit_failure    → (scrape_id, group_id)
 rebalance_loops   → (scrape_id, group_id)
 partition_skew    → (scrape_id, topic)
 broker_saturation → (scrape_id,)
@@ -57,14 +56,14 @@ def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
     W = WINDOW
 
     grp = (
-        lag.groupby(["scrape_id", "group_id", "partition"])
+        lag.groupby(["scrape_id", "group_id"])
         .agg(
             total_lag=("lag", "sum"),
             total_committed=("committed_offset", "sum"),
             stable_frac=("group_state", lambda s: (s == "Stable").mean()),
         )
         .reset_index()
-        .sort_values(["group_id", "partition", "scrape_id"])
+        .sort_values(["group_id", "scrape_id"])
     )
 
     def group_roll(df: pd.DataFrame) -> pd.DataFrame:
@@ -77,7 +76,7 @@ def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
         df["lag_max_jump"] = df["lag_delta"].rolling(W, min_periods=1).max()
         return df
 
-    grp = grp.groupby(["group_id", "partition"], group_keys=False).apply(group_roll)
+    grp = grp.groupby(["group_id"], group_keys=False)[grp.columns].apply(group_roll)
 
     # Broker-wide msgs_in for normalisation
     msgs_in = (
@@ -86,18 +85,19 @@ def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
             & jmx["topic"].isna()
         ]
         .groupby("scrape_id")["value"]
-        .first()
+        .sum()
         .rename("msgs_in_total")
     )
     grp = grp.merge(msgs_in.reset_index(), on="scrape_id", how="left")
-    grp["lag_normalized"] = grp["total_lag"] / grp["msgs_in_total"].replace(0, np.nan)
+    grp["lag_normalized"] = grp["total_lag"] / grp["msgs_in_total"].replace(0, np.nan).fillna(0)
 
     cols = [
-        "scrape_id", "group_id", "partition",
+        "scrape_id", "group_id",
         "total_lag", "lag_growth_slope", "lag_delta_std",
         "lag_normalized", "committed_delta_rate", "stable_frac", "lag_max_jump",
     ]
-    return grp[cols].fillna(0)
+    grp = grp.dropna(subset=["lag_growth_slope"])
+    return grp[cols]
 
 # ── 3. rebalance_loops ───────────────────────────────────────────────────────
 
@@ -140,7 +140,7 @@ def extract_rebalance_loops(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFram
         df["lag_mean"] = df["total_lag"].rolling(W, min_periods=1).mean()
         return df
 
-    grp = grp.groupby("group_id", group_keys=False).apply(group_roll)
+    grp = grp.groupby("group_id", group_keys=False)[grp.columns].apply(group_roll)
 
     # ── Broker-level JMX (same value broadcast to every group at that scrape) ──
     scrape_ids = grp["scrape_id"].unique()

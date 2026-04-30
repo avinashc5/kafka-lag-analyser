@@ -23,13 +23,19 @@ services:
     depends_on:
       - kafka
 
-  # analyser:
-  #   build: ./analyser
-  #   container_name: analyser
-  #   volumes:
-  #     - ./analyser:/app
-  #   depends_on:
-  #     - kafka
+  analyser:
+    build:
+      context: .
+      dockerfile: analyser/Dockerfile
+    container_name: analyser
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    depends_on:
+      - scraper
+
 
   scraper:
     build: ./scraper

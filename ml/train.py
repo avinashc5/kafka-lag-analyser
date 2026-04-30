@@ -29,7 +29,7 @@ from .features import (
 # ── Entity keys (columns that identify each training row, not features) ────────
 
 ENTITY_KEYS: dict[str, list[str]] = {
-    "slow_consumer":    ["scrape_id", "group_id", "partition"],
+    "slow_consumer":    ["scrape_id", "group_id"],
     "rebalance_loops":  ["scrape_id", "group_id"],
     "partition_skew":   ["scrape_id", "topic"],
     "broker_saturation": ["scrape_id"],
@@ -96,8 +96,8 @@ def train_model(fault_class: str) -> xgb.XGBClassifier:
     sample_weights = compute_sample_weight("balanced", y)
 
     model = xgb.XGBClassifier(
-        n_estimators=300,
-        max_depth=5,
+        n_estimators=5,
+        max_depth=3,
         learning_rate=0.05,
         subsample=0.8,
         colsample_bytree=0.8,
