@@ -77,13 +77,11 @@ class Scraper:
         })
 
         log.info(
-            "Scraped  jmx=%-4d  lag_rows=%-3d  (batch %d/%d)",
-            len(jmx_samples), len(admin_samples),
-            len(self._batch), BATCH_SIZE,
+            "Scraped  jmx=%-4d  lag_rows=%-3d",
+            len(jmx_samples), len(admin_samples)
         )
 
-        if len(self._batch) >= BATCH_SIZE:
-            self._flush()
+        self._flush()
 
     # ── flush / shutdown ───────────────────────────────────────────────────────
 
