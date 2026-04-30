@@ -28,7 +28,7 @@ def add_topic_partitions(new_total=12):
     print(f"[*] Adding partitions (new total: {new_total})...")
     subprocess.run([
         "docker", "compose", "exec", "-t", "kafka",
-        "kafka-topics.sh", "--alter", "--topic", "test-topic",
+        "bin/kafka-topics.sh", "--alter", "--topic", "test-topic",
         "--partitions", str(new_total), "--bootstrap-server", "localhost:9092"
     ])
 
