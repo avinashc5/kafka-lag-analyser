@@ -169,10 +169,11 @@ def load_model(fault_class: str) -> xgb.XGBClassifier:
 
 
 def _available_classes() -> list[str]:
+    from .data import DIR_MAPPING
     return [
         fc for fc in FAULT_CLASSES
-        if (TRAINING_DIR / fc / "metrics.db").exists()
-        and (TRAINING_DIR / fc / "labels.csv").exists()
+        if (TRAINING_DIR / DIR_MAPPING[fc] / "metrics.db").exists()
+        and (TRAINING_DIR / DIR_MAPPING[fc] / "labels.csv").exists()
     ]
 
 

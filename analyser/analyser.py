@@ -217,8 +217,8 @@ async def startup_event():
             fault_class = p.stem
             try:
                 with open(p, "rb") as f:
-                    model = pickle.load(f)
-                models[fault_class] = model
+                    payload = pickle.load(f)
+                models[fault_class] = payload["model"] if isinstance(payload, dict) else payload
                 logger.info(f"Loaded model for {fault_class}")
             except Exception as e:
                 logger.error(f"Failed to load {fault_class} model: {e}")

@@ -50,7 +50,7 @@ def extract_slow_consumer(jmx: pd.DataFrame, lag: pd.DataFrame) -> pd.DataFrame:
     lag_delta_std          : rolling std of lag changes (erratic vs sustained growth)
     lag_normalized         : total_lag / broker-wide msgs_in_per_sec
     committed_delta_rate   : rolling mean of Δcommitted_offset (processing throughput proxy)
-    # stable_frac            : fraction of partitions in Stable state
+    stable_frac            : fraction of partitions in Stable state
     lag_max_jump           : largest single-step lag increase in window
     """
     W = WINDOW
