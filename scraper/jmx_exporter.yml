@@ -82,7 +82,7 @@ rules:
   - pattern: "kafka.network<type=RequestMetrics, name=(RequestsPerSec), request=(JoinGroup|SyncGroup)><>OneMinuteRate"
     name: "kafka_network_requestmetrics_requestspersec_oneminuterate"
     labels:
-      request: "$1"
+      request: "$2"
     type: GAUGE
 
   # ── Broker thread utilisation ──
