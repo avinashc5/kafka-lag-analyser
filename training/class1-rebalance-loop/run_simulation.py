@@ -40,10 +40,10 @@ def main():
 
     phases = []
 
-    cycles = 1
+    cycles = 2
     partition_count = 6
     # duration_per_phase = 10 * 60
-    duration_per_phase = 1 * 30  # 10 minutes per phase for real runs, can be reduced for testing
+    duration_per_phase = 10 * 60  # 10 minutes per phase for real runs, can be reduced for testing
 
     for cycle in range(cycles):
         print(f"\n--- Starting Cycle {cycle+1}/{cycles} ---")
