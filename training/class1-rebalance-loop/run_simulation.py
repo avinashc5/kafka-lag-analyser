@@ -41,10 +41,10 @@ def main():
 
     phases = []
 
-    cycles = 2
+    cycles = 1
     partition_count = 6
     # duration_per_phase = 10 * 60
-    duration_per_phase = 10 * 60  # 10 minutes per phase for real runs, can be reduced for testing
+    duration_per_phase = 1 * 60  # 10 minutes per phase for real runs, can be reduced for testing
 
     for cycle in range(cycles):
         print(f"\n--- Starting Cycle {cycle+1}/{cycles} ---")
@@ -57,9 +57,9 @@ def main():
 
         print("[*] Entering Fault State: Explicit Connections Rebalancing")
         start_time = utc_now()
-        for _ in range(duration_per_phase // 5):
+        for _ in range(10):
             set_consumers_state(reconnect=True, target_consumers=[CONSUMERS[random.randint(0, len(CONSUMERS)-1)]])
-            time.sleep(20)
+            time.sleep(5)
         phases.append((start_time, utc_now(), "fault", "explicit_reconnects"))
 
         print("[*] Returning to Healthy State")
@@ -70,9 +70,9 @@ def main():
 
         print("[*] Entering Fault State: Consumer Timeouts")
         start_time = utc_now()
-        for _ in range(duration_per_phase // 20):
+        for _ in range(10):
             set_consumers_state(fault_mode="consumer_timeout", target_consumers=[CONSUMERS[random.randint(0, len(CONSUMERS)-1)]])
-            time.sleep(20)
+            time.sleep(5)
         phases.append((start_time, utc_now(), "fault", "consumer_timeouts"))
 
         print("[*] Returning to Healthy State")
@@ -83,7 +83,7 @@ def main():
 
         print("[*] Entering Fault State: Topic Partition Additions")
         start_time = utc_now()
-        for i in range(duration_per_phase // 5):
+        for i in range(30):
             partition_count += 1
             add_topic_partitions(new_total=partition_count)
             time.sleep(10)
