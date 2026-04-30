@@ -13,38 +13,20 @@ services:
   producer:
     build:
       context: ./producer
+    ports:
+      - "5001:5000"
     depends_on:
       - kafka
 
   consumer-1:
     build:
       context: ./consumer
-    ports:
-      - "5001:5000"
     depends_on:
       - kafka
 
   consumer-2:
     build:
       context: ./consumer
-    ports:
-      - "5002:5000"
-    depends_on:
-      - kafka
-
-  consumer-3:
-    build:
-      context: ./consumer
-    ports:
-      - "5003:5000"
-    depends_on:
-      - kafka
-
-  consumer-4:
-    build:
-      context: ./consumer
-    ports:
-      - "5004:5000"
     depends_on:
       - kafka
 
