@@ -24,6 +24,7 @@ def consume_loop():
                     auto_commit_interval_ms=1000,
                     session_timeout_ms=10000,
                     max_poll_interval_ms=10000,
+                    auto_offset_reset="earliest"
                 )
                 print("[Consumer] Connected.")
                 return c
@@ -48,6 +49,7 @@ def consume_loop():
             messages = consumer.poll(timeout_ms=1000)
             for topic_partition, msgs in messages.items():
                 for msg in msgs:
+                    print(f"[Consumer] Consumed msg={msg.value} from partition={msg.partition}")
                     time.sleep(0.01)
 
         except Exception as e:

@@ -43,7 +43,7 @@ def main():
     cycles = 2
     partition_count = 6
     # duration_per_phase = 10 * 60
-    duration_per_phase = 10 * 60  # 10 minutes per phase for real runs, can be reduced for testing
+    duration_per_phase = 1 * 60  # 10 minutes per phase for real runs, can be reduced for testing
 
     for cycle in range(cycles):
         print(f"\n--- Starting Cycle {cycle+1}/{cycles} ---")
@@ -94,8 +94,8 @@ def main():
         container_id_cmd = subprocess.run(["docker", "compose", "ps", "-q", "scraper"], capture_output=True, text=True)
         container_id = container_id_cmd.stdout.strip()
 
-        subprocess.run(["docker", "cp", f"{container_id}:/app/scraper/data/metrics.db", "metrics.db"])
-        print(f"Metrics DB exported successfully")
+        subprocess.run(["docker", "cp", f"{container_id}:/app/data/metrics.db", "metrics.db"])
+        print("Metrics DB exported successfully")
     except Exception as e:
         print(f"Error copying metrics DB: {e}")
 

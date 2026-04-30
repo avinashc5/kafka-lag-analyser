@@ -40,46 +40,46 @@ rules:
   #           ResponseSendTimeMs, RequestQueueTimeMs, ResponseQueueTimeMs
 
   # Fixed: Add capture groups for all $N references
-  - pattern: "kafka.network<type=RequestMetrics, name=(TotalTimeMs), request=(JoinGroup|FetchConsumer)><>99thPercentile"
-    name: "kafka_network_requestmetrics_$1_99thpercentile"
+  - pattern: "kafka.network<type=RequestMetrics, name=TotalTimeMs, request=(JoinGroup|FetchConsumer)><>99thPercentile"
+    name: "kafka_network_requestmetrics_totaltimems_99thpercentile"
     labels:
-      request: "$2"
+      request: "$1"
     type: GAUGE
 
-  - pattern: "kafka.network<type=RequestMetrics, name=(ThrottleTimeMs), request=(Produce|FetchConsumer)><>99thPercentile"
-    name: "kafka_network_requestmetrics_$1_99thpercentile"
+  - pattern: "kafka.network<type=RequestMetrics, name=ThrottleTimeMs, request=(Produce|FetchConsumer)><>99thPercentile"
+    name: "kafka_network_requestmetrics_throttletimems_99thpercentile"
     labels:
-      request: "$2"
+      request: "$1"
     type: GAUGE
 
-  - pattern: "kafka.network<type=RequestMetrics, name=(RequestQueueTimeMs), request=(FetchConsumer)><>99thPercentile"
-    name: "kafka_network_requestmetrics_$1_99thpercentile"
+  - pattern: "kafka.network<type=RequestMetrics, name=RequestQueueTimeMs, request=(FetchConsumer)><>99thPercentile"
+    name: "kafka_network_requestmetrics_requestqueuetimems_99thpercentile"
     labels:
-      request: "$2"
+      request: "$1"
     type: GAUGE
 
-  - pattern: "kafka.network<type=RequestMetrics, name=(LocalTimeMs), request=(Produce)><>99thPercentile"
-    name: "kafka_network_requestmetrics_$1_99thpercentile"
+  - pattern: "kafka.network<type=RequestMetrics, name=LocalTimeMs, request=(Produce)><>99thPercentile"
+    name: "kafka_network_requestmetrics_localtimems_99thpercentile"
     labels:
-      request: "$2"
+      request: "$1"
     type: GAUGE
 
-  - pattern: "kafka.network<type=RequestMetrics, name=(RemoteTimeMs), request=(Produce)><>99thPercentile"
-    name: "kafka_network_requestmetrics_$1_99thpercentile"
+  - pattern: "kafka.network<type=RequestMetrics, name=RemoteTimeMs, request=(Produce)><>99thPercentile"
+    name: "kafka_network_requestmetrics_remotetimems_99thpercentile"
     labels:
-      request: "$2"
+      request: "$1"
     type: GAUGE
 
-  - pattern: "kafka.network<type=RequestMetrics, name=(ResponseSendTimeMs), request=(FetchConsumer)><>99thPercentile"
-    name: "kafka_network_requestmetrics_$1_99thpercentile"
+  - pattern: "kafka.network<type=RequestMetrics, name=ResponseSendTimeMs, request=(FetchConsumer)><>99thPercentile"
+    name: "kafka_network_requestmetrics_responsesendtimems_99thpercentile"
     labels:
-      request: "$2"
+      request: "$1"
     type: GAUGE
 
 
   # ── Request rates (JoinGroup / SyncGroup → rebalance signal) ──
   # Produces: kafka_network_requestmetrics_requestspersec_oneminuterate{request="..."}
-  - pattern: "kafka.network<type=RequestMetrics, name=(RequestsPerSec), request=(JoinGroup|SyncGroup)><>OneMinuteRate"
+  - pattern: "kafka.network<type=RequestMetrics, name=RequestsPerSec, request=(JoinGroup|SyncGroup), .*><>OneMinuteRate"
     name: "kafka_network_requestmetrics_requestspersec_oneminuterate"
     labels:
       request: "$1"
@@ -87,32 +87,30 @@ rules:
 
   # ── Broker thread utilisation ──
   # Produces: kafka_server_kafkarequesthandlerpool_requesthandleravgidlepercent
-  - pattern: "kafka.server<type=KafkaRequestHandlerPool, name=(RequestHandlerAvgIdlePercent)><>OneMinuteRate"
+  - pattern: "kafka.server<type=KafkaRequestHandlerPool, name=RequestHandlerAvgIdlePercent><>OneMinuteRate"
     name: "kafka_server_kafkarequesthandlerpool_requesthandleravgidlepercent"
     type: GAUGE
 
   # Produces: kafka_network_socketserver_networkprocessoravgidlepercent
-  - pattern: "kafka.network<type=SocketServer, name=(NetworkProcessorAvgIdlePercent)><>Value"
+  - pattern: "kafka.network<type=SocketServer, name=NetworkProcessorAvgIdlePercent><>Value"
     name: "kafka_network_socketserver_networkprocessoravgidlepercent"
     type: GAUGE
 
   # ── Replication health ──
   # Produces: kafka_server_replicamanager_<name>
-  - pattern: "kafka.server<type=ReplicaManager, name=(UnderReplicatedPartitions)><>Value"
-    name: "kafka_server_replicamanager_$1"
+  - pattern: "kafka.server<type=ReplicaManager, name=UnderReplicatedPartitions><>Value"
+    name: "kafka_server_replicamanager_underreplicatedpartitions"
     type: GAUGE
 
   # Produces: kafka_server_replicafetchermanager_maxlag{client_id="..."}
-  - pattern: "kafka.server<type=ReplicaFetcherManager, name=(MaxLag)><>Value"
+  - pattern: "kafka.server<type=ReplicaFetcherManager, name=MaxLag><>Value"
     name: "kafka_server_replicafetchermanager_maxlag"
-    labels:
-      client_id: "$1"
     type: GAUGE
 
   # ── Controller ──
   # Produces: kafka_controller_kafkacontroller_<name>
-  - pattern: "kafka.controller<type=KafkaController, name=(OfflinePartitionsCount)><>Value"
-    name: "kafka_controller_kafkacontroller_$1"
+  - pattern: "kafka.controller<type=KafkaController, name=OfflinePartitionsCount><>Value"
+    name: "kafka_controller_kafkacontroller_offlinepartitionscount"
     type: GAUGE
 
   # ── Group Coordinator (rebalance state) ──
