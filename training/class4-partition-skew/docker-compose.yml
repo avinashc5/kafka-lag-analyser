@@ -3,7 +3,7 @@ services:
     build:
       context: ../../
       dockerfile: kafka-docker/Dockerfile
-      newtwork: host
+      network: host
     ports:
       - "9092:9092"
       - "9093:9093"
