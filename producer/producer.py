@@ -25,16 +25,20 @@ try:
 except Exception as e:
     print(f"[Producer] Topic may already exist: {e}")
 
+NUM_PARTITIONS = 6
+
 i = 0
 while True:
     if FAULT == "partition_imbalance":
-        # All messages go to partition 0 via fixed key
+        # Pin all traffic to partition 0 to simulate skew.
+        partition = 0
         key = b"same-key"
     else:
-        # Spread across partitions
-        key = f"key-{random.randint(0, 5)}".encode()
+        # Round-robin across all partitions so every partition gets messages.
+        partition = i % NUM_PARTITIONS
+        key = f"key-{partition}".encode()
 
-    producer.send("test-topic", key=key, value=f"msg-{i}".encode())
+    producer.send("test-topic", partition=partition, key=key, value=f"msg-{i}".encode())
 
     if FAULT == "high_throughput":
         # Flood messages to create lag

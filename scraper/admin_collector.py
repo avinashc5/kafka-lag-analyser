@@ -78,16 +78,27 @@ class AdminCollector:
         if not committed:
             return []
 
-        topic_partitions = list(committed.keys())
-        end_offsets = self._consumer.end_offsets(topic_partitions)
+        # Expand to every partition of each topic, not just ones with a
+        # committed offset.  Partitions that haven't been committed yet are
+        # treated as offset=0 so their lag is still visible in the DB.
+        topics = {tp.topic for tp in committed if tp.topic not in _INTERNAL_TOPICS}
+        all_tps = set()
+        for topic in topics:
+            partitions = self._consumer.partitions_for_topic(topic) or set()
+            for p in partitions:
+                all_tps.add(TopicPartition(topic, p))
+
+        if not all_tps:
+            return []
+
+        end_offsets = self._consumer.end_offsets(list(all_tps))
 
         descriptions = self._admin.describe_consumer_groups([group_id])
         state = descriptions[0].state if descriptions else "Unknown"
 
         samples = []
-        for tp, offset_meta in committed.items():
-            if tp.topic in _INTERNAL_TOPICS:
-                continue
+        for tp in all_tps:
+            offset_meta = committed.get(tp)
             committed_offset = offset_meta.offset if offset_meta else 0
             log_end_offset   = end_offsets.get(tp, committed_offset)
             samples.append(GroupLagSample(
