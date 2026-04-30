@@ -118,7 +118,7 @@ def main():
                 for start, end, state, fault_cause in phases:
                     # ISO-8601 strings allow for valid lexicographical time comparisons
                     if start <= s_time <= end:
-                        current_label = fault_cause if fault_cause != "none" else "healthy"
+                        current_label = 1 if fault_cause != "none" else 0
                         break
 
                 writer.writerow([s_id, current_label])
