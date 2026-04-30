@@ -35,15 +35,15 @@ def main():
     print("Starting simulation framework for Class 1 (Rebalance Loop)....")
 
     subprocess.run(["docker", "compose", "up", "-d", "--build"], check=True)
-    print("Waiting 30 seconds for Kafka, Producer, and Consumers to warm up...")
-    time.sleep(30)
+    print("Waiting 20 seconds for Kafka, Producer, and Consumers to warm up...")
+    time.sleep(20)
 
     phases = []
 
-    cycles = 2
+    cycles = 1
     partition_count = 6
     # duration_per_phase = 10 * 60
-    duration_per_phase = 1 * 60  # 10 minutes per phase for real runs, can be reduced for testing
+    duration_per_phase = 1 * 30  # 10 minutes per phase for real runs, can be reduced for testing
 
     for cycle in range(cycles):
         print(f"\n--- Starting Cycle {cycle+1}/{cycles} ---")
