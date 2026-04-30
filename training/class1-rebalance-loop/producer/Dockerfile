@@ -5,4 +5,4 @@ COPY . /app
 
 RUN pip install kafka-python
 
-CMD ["python", "producer.py"]
+CMD ["python3", "-u", "producer.py"]
