@@ -20,7 +20,7 @@ from sklearn.utils.class_weight import compute_sample_weight
 from .data import FAULT_CLASSES, MODELS_DIR, TRAINING_DIR, load_fault_data
 from .features import (
     extract_broker_saturation,
-    extract_network_degradation,
+    extract_network_delay,
     extract_partition_skew,
     extract_rebalance_loops,
     extract_slow_consumer,
@@ -49,7 +49,7 @@ def _extract(fault_class: str, jmx: pd.DataFrame, lag: pd.DataFrame, sessions: p
     if fault_class == "broker_saturation":
         return extract_broker_saturation(jmx, sessions)
     if fault_class == "network_degradation":
-        return extract_network_degradation(jmx, sessions)
+        return extract_network_delay(jmx, sessions)
     raise ValueError(f"Unknown fault class: {fault_class!r}")
 
 
@@ -65,7 +65,8 @@ def build_dataset(fault_class: str) -> tuple[pd.DataFrame, pd.Series, list[str]]
     sessions, jmx, lag, labels = load_fault_data(fault_class)
     features_df = _extract(fault_class, jmx, lag, sessions)
 
-    dataset = features_df.merge(labels[["scrape_id", "fault"]], on="scrape_id", how="inner")
+    dataset = features_df.merge(labels[["scrape_id", "label"]], on="scrape_id", how="inner")
+    dataset = dataset.rename(columns={"label": "fault"})
 
     non_feature_cols = set(ENTITY_KEYS[fault_class] + ["fault"])
     feature_cols = [c for c in dataset.columns if c not in non_feature_cols]
