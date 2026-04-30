@@ -120,8 +120,8 @@ def main():
                     if start <= s_time <= end:
                         current_label = 1 if fault_cause != "none" else 0
                         break
-
-                writer.writerow([s_id, current_label])
+                if not (current_label == "unknown"):
+                    writer.writerow([s_id, current_label])
         print("labels.csv generated successfully.")
     except Exception as e:
         print(f"Error generating labels.csv: {e}")

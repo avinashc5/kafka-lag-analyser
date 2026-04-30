@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  kafka:
+    build:
+      context: ../../
+      dockerfile: training/class3-network-degradation/broker/Dockerfile
+    command: ["bash", "./start_custom.sh", "server1.properties"]
+    volumes:
+      - ./broker/start_custom.sh:/kafka/start_custom.sh
+      - ./broker/server1.properties:/kafka/server1.properties
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+
+  kafka2:
+    build:
+      context: ../../
+      dockerfile: training/class3-network-degradation/broker/Dockerfile
+    command: ["bash", "./start_custom.sh", "server2.properties"]
+    volumes:
+      - ./broker/start_custom.sh:/kafka/start_custom.sh
+      - ./broker/server2.properties:/kafka/server2.properties
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "9094:9092"
+      - "9102:9101"
+
+  producer:
+    build:
+      context: ./producer
+    depends_on:
+      - kafka
+      - kafka2
+    cap_add:
+      - NET_ADMIN
+
+  consumer:
+    build:
+      context: ./consumer
+    depends_on:
+      - kafka
+      - kafka2
+    cap_add:
+      - NET_ADMIN
+
+  scraper:
+    build:
+      context: ../../scraper
+    depends_on:
+      - kafka
