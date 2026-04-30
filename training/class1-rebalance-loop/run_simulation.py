@@ -83,10 +83,10 @@ def main():
 
         print("[*] Entering Fault State: Topic Partition Additions")
         start_time = utc_now()
-        for i in range(duration_per_phase // 5):
+        for i in range(30):
             partition_count += 1
             add_topic_partitions(new_total=partition_count)
-            time.sleep(60)
+            time.sleep(10)
         phases.append((start_time, utc_now(), "fault", "metadata_changes"))
 
     print("\nSimulation complete. Shutting down environment...")

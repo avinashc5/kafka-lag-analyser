@@ -40,7 +40,7 @@ rules:
   #           ResponseSendTimeMs, RequestQueueTimeMs, ResponseQueueTimeMs
 
   # Fixed: Add capture groups for all $N references
-  - pattern: "kafka.network<type=RequestMetrics, name=TotalTimeMs, request=(JoinGroup|FetchConsumer)><>99thPercentile"
+  - pattern: "kafka.network<type=RequestMetrics, name=TotalTimeMs, request=(JoinGroup|FetchConsumer|Produce)><>99thPercentile"
     name: "kafka_network_requestmetrics_totaltimems_99thpercentile"
     labels:
       request: "$1"
