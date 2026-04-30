@@ -1,3 +1,4 @@
+import random
 import subprocess
 import time
 import csv
@@ -56,8 +57,8 @@ def main():
 
         print("[*] Entering Fault State: Explicit Connections Rebalancing")
         start_time = utc_now()
-        for _ in range(duration_per_phase // 20):
-            set_consumers_state(reconnect=True, target_consumers=[CONSUMERS[0]])
+        for _ in range(duration_per_phase // 5):
+            set_consumers_state(reconnect=True, target_consumers=[CONSUMERS[random.randint(0, len(CONSUMERS)-1)]])
             time.sleep(20)
         phases.append((start_time, utc_now(), "fault", "explicit_reconnects"))
 
@@ -68,9 +69,10 @@ def main():
         phases.append((start_time, utc_now(), "healthy", "none"))
 
         print("[*] Entering Fault State: Consumer Timeouts")
-        set_consumers_state(fault_mode="consumer_timeout", target_consumers=[CONSUMERS[1]])
         start_time = utc_now()
-        time.sleep(duration_per_phase)
+        for _ in range(duration_per_phase // 20):
+            set_consumers_state(fault_mode="consumer_timeout", target_consumers=[CONSUMERS[random.randint(0, len(CONSUMERS)-1)]])
+            time.sleep(20)
         phases.append((start_time, utc_now(), "fault", "consumer_timeouts"))
 
         print("[*] Returning to Healthy State")
@@ -81,7 +83,7 @@ def main():
 
         print("[*] Entering Fault State: Topic Partition Additions")
         start_time = utc_now()
-        for i in range(duration_per_phase // 60):
+        for i in range(duration_per_phase // 5):
             partition_count += 1
             add_topic_partitions(new_total=partition_count)
             time.sleep(60)
