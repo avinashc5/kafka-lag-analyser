@@ -14,12 +14,19 @@ WINDOW = 5  # rolling window size in scrapes
 
 FAULT_CLASSES = [
     "slow_consumer",
-    "commit_failure",
     "rebalance_loops",
     "partition_skew",
     "broker_saturation",
-    "network_delay",
+    "network_degradation",
 ]
+
+DIR_MAPPING = {
+    "slow_consumer": "class5-slow-consumer",
+    "rebalance_loops": "class1-rebalance-loop",
+    "broker_saturation": "class2-broker-saturation",
+    "network_degradation": "class3-network-degradation",
+    "partition_skew": "class4-partition-skew"
+}
 
 # ── Loaders ────────────────────────────────────────────────────────────────────
 
@@ -36,8 +43,8 @@ def load_fault_data(fault_class: str) -> tuple:
                             committed_offset, log_end_offset, lag, group_state]
       - labels:   DataFrame[scrape_id, fault]
     """
-    db_path = TRAINING_DIR / fault_class / "metrics.db"
-    labels_path = TRAINING_DIR / fault_class / "labels.csv"
+    db_path = TRAINING_DIR / DIR_MAPPING[fault_class] / "metrics.db"
+    labels_path = TRAINING_DIR / DIR_MAPPING[fault_class] / "labels.csv"
 
     conn = sqlite3.connect(db_path)
     sessions = pd.read_sql("SELECT id FROM scrape_sessions ORDER BY id", conn)
