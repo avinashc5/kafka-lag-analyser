@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import time
 from kafka import KafkaAdminClient, KafkaConsumer, TopicPartition
 from kafka.errors import KafkaError
 
@@ -31,7 +32,13 @@ class AdminCollector:
         self._consumer: KafkaConsumer = None
 
     def connect(self):
-        self._admin = KafkaAdminClient(bootstrap_servers=self._bootstrap)
+        while True:
+            try:
+                self._admin = KafkaAdminClient(bootstrap_servers=self._bootstrap)
+                break
+            except Exception as e:
+                print(f"[Scraper] Waiting for Kafka... {e}")
+                time.sleep(3)
         # A no-group consumer used solely for end_offsets() queries.
         self._consumer = KafkaConsumer(
             bootstrap_servers=self._bootstrap,

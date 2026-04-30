@@ -7,10 +7,10 @@ BATCH_SIZE = 6  # number of scrapes to buffer before writing to DB
 # ── Connection endpoints ───────────────────────────────────────────────────────
 
 # HTTP endpoint exposed by the Prometheus JMX Exporter Java agent on the broker
-JMX_EXPORTER_URL = "http://localhost:9101/metrics"
+JMX_EXPORTER_URL = "http://kafka:9101/metrics"
 
 # Kafka bootstrap address – used only for the Admin API (broker-side queries)
-KAFKA_BOOTSTRAP_SERVERS = ["localhost:9092"]
+KAFKA_BOOTSTRAP_SERVERS = ["kafka:9092"]
 
 # ── Storage ────────────────────────────────────────────────────────────────────
 
