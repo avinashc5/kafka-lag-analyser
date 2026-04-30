@@ -28,8 +28,8 @@ def main():
     time.sleep(30)
 
     phases = []
-    cycles = 2
-    duration_per_phase = 10 * 60
+    cycles = 10
+    duration_per_phase = 2 * 60
 
     for cycle in range(cycles):
         print(f"\n--- Starting Cycle {cycle+1}/{cycles} ---")
