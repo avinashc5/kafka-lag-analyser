@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kafka Lag Analyser Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 40px;
+            background: #f4f4f9;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        h1,
+        h2 {
+            color: #222;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .fault {
+            border-left: 5px solid #d9534f;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #fdf2f2;
+            border-radius: 4px;
+        }
+
+        .ok {
+            border-left: 5px solid #5cb85c;
+            padding: 15px;
+            background-color: #f2fdf2;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+        }
+
+        pre {
+            background: #eee;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.9em;
+            border: 1px solid #ccc;
+        }
+
+        details {
+            margin-top: 10px;
+        }
+
+        summary {
+            cursor: pointer;
+            font-weight: bold;
+            color: #0056b3;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: #333;
+            color: #fff;
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Kafka Lag Analyser Dashboard</h1>
+    <div class="card" id="current">
+        <h2>Currently Active Faults</h2>
+        <div id="status">Loading...</div>
+    </div>
+
+    <div class="card" id="history">
+        <h2>Recent Fault History</h2>
+        <div id="history-container">Loading...</div>
+    </div>
+
+    <script>
+        async function fetchFaults() {
+            try {
+                const res = await fetch('/api/faults');
+                const data = await res.json();
+
+                const statusDiv = document.getElementById('status');
+                if (data.current.length === 0) {
+                    statusDiv.innerHTML = '<div class="ok"><strong>Healthy:</strong> No active faults detected in the current cluster state.</div>';
+                } else {
+                    statusDiv.innerHTML = '';
+                    data.current.forEach(f => {
+                        let entityTags = Object.entries(f.entity).map(([k, v]) => `<span class="badge">${k}: ${v}</span>`).join(' ');
+                        statusDiv.innerHTML += `
+                            <div class="fault">
+                                <h3 style="margin-top: 0;">⚠️ ${f.fault_class}</h3>
+                                <strong>Scrape ID:</strong> ${f.scrape_id} <br><br>
+                                ${entityTags} <br>
+                                <details><summary>Trigger Features (Metrics)</summary><pre>${JSON.stringify(f.trigger_values, null, 2)}</pre></details>
+                            </div>
+                        `;
+                    });
+                }
+
+                const historyDiv = document.getElementById('history-container');
+                if (data.history.length === 0) {
+                    historyDiv.innerHTML = 'No history available yet.';
+                } else {
+                    historyDiv.innerHTML = '';
+                    // Reverse to show newest on top
+                    [...data.history].reverse().forEach(f => {
+                        let entityStr = Object.entries(f.entity).map(([k, v]) => `${k}=${v}`).join(', ');
+                        historyDiv.innerHTML += `
+                            <div style="border-bottom: 1px solid #eee; padding: 12px 0;">
+                                <strong>[Scrape ${f.scrape_id}]</strong> <span style="color: #d9534f; font-weight: bold;">${f.fault_class}</span> detected for <code>${entityStr}</code>
+                            </div>
+                        `;
+                    });
+                }
+            } catch (e) {
+                console.error("Error fetching faults", e);
+                document.getElementById('status').innerHTML = '<div class="fault" style="border-color:#f0ad4e;"><strong>Error:</strong> Cannot connect to Analyser API. Retrying...</div>';
+            }
+        }
+
+        setInterval(fetchFaults, 3000);
+        fetchFaults();
+    </script>
+</body>
+
+</html>

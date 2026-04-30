@@ -74,7 +74,7 @@ def main():
                 current_label = "unknown"
                 for start, end, state, fault_cause in phases:
                     if start <= s_time <= end:
-                        current_label = fault_cause if fault_cause != "none" else "healthy"
+                        current_label = fault_cause if fault_cause != 1 else 0
                         break
                 if not current_label == "unknown":
                     writer.writerow([s_id, current_label])
