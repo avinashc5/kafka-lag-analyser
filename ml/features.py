@@ -362,13 +362,17 @@ def extract_network_delay(jmx: pd.DataFrame, sessions: pd.DataFrame) -> pd.DataF
 
     Features
     --------
-    remote_time_produce_p99   : RemoteTimeMs P99 for Produce (inter-broker/follower ACK wait)
-    response_send_time_p99    : ResponseSendTimeMs P99 for FetchConsumer (broker→consumer link)
-    total_time_fetch_p99      : TotalTimeMs P99 for FetchConsumer (end-to-end fetch latency)
-    network_component         : total_time_fetch - local_time_produce (estimated non-broker latency)
-    under_replicated          : UnderReplicatedPartitions (replicas can't keep up = network slow)
-    replica_maxlag            : ReplicaFetcherManager MaxLag (inter-broker lag)
-    replication_ratio         : ReplicationBytesOutPerSec / BytesInPerSec (replication health)
+    remote_time_produce_p99        : RemoteTimeMs P99 for Produce (inter-broker/follower ACK wait)
+    response_send_time_p99         : ResponseSendTimeMs P99 for FetchConsumer (broker→consumer link)
+    total_time_fetch_p99           : TotalTimeMs P99 for FetchConsumer (end-to-end fetch latency)
+    network_component              : total_time_fetch - local_time_produce (estimated non-broker latency)
+    under_replicated               : UnderReplicatedPartitions (replicas can't keep up = network slow)
+    replica_maxlag                 : ReplicaFetcherManager MaxLag (inter-broker lag)
+    replication_ratio              : ReplicationBytesOutPerSec / BytesInPerSec (replication health)
+    remote_time_produce_p99_trend  : rolling slope of remote_time_produce_p99
+    response_send_time_p99_trend   : rolling slope of response_send_time_p99
+    under_replicated_trend         : rolling slope of under_replicated
+    replica_maxlag_trend           : rolling slope of replica_maxlag
     """
     W = WINDOW
     broker = build_broker_frame(jmx, sessions["id"]).reset_index()
@@ -409,5 +413,7 @@ def extract_network_delay(jmx: pd.DataFrame, sessions: pd.DataFrame) -> pd.DataF
         "remote_time_produce_p99", "response_send_time_p99",
         "total_time_fetch_p99", "network_component",
         "under_replicated", "replica_maxlag", "replication_ratio",
+        "remote_time_produce_p99_trend", "response_send_time_p99_trend",
+        "under_replicated_trend", "replica_maxlag_trend",
     ]
     return df[cols].fillna(0)
