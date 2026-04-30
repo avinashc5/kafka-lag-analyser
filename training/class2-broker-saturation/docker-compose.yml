@@ -1,10 +1,9 @@
-version: '3.8'
-
 services:
   kafka:
     build:
       context: ../../
       dockerfile: kafka-docker/Dockerfile
+      network: host
     ports:
       - "9092:9092"
       - "9093:9093"
@@ -13,25 +12,29 @@ services:
   producer:
     build:
       context: ./producer
+      network: host
     ports:
-      - "5001:5000"
+      - "6001:5000"
     depends_on:
       - kafka
 
   consumer-1:
     build:
       context: ./consumer
+      network: host
     depends_on:
       - kafka
 
   consumer-2:
     build:
       context: ./consumer
+      network: host
     depends_on:
       - kafka
 
   scraper:
     build:
       context: ../../scraper
+      network: host
     depends_on:
       - kafka

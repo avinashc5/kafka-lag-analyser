@@ -6,7 +6,7 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-PRODUCER = "http://localhost:5001/setState"
+PRODUCER = "http://localhost:6001/setState"
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
