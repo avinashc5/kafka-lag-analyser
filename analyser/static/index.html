@@ -199,13 +199,16 @@
       </table>`;
     }
 
+    const HIDDEN_FAULTS = new Set(['network_degradation']);
+
     function renderCurrentFaults(faults) {
       const div = document.getElementById('status');
-      if (!faults || faults.length === 0) {
+      const visible = (faults || []).filter(f => !HIDDEN_FAULTS.has(f.fault_class));
+      if (visible.length === 0) {
         div.innerHTML = '<div class="ok-block"><span class="status-dot dot-green"></span>Healthy — no active faults detected in the current cluster state.</div>';
         return;
       }
-      div.innerHTML = faults.map(f => {
+      div.innerHTML = visible.map(f => {
         const entityTags = Object.entries(f.entity || {})
           .map(([k, v]) => `<span class="badge">${k}: ${v}</span>`).join('');
         const impHtml = buildImportancesTable(f.features, f.importances);
@@ -230,7 +233,7 @@
       // Show newest first
       const sorted = [...snapshots].reverse();
       div.innerHTML = sorted.map(snap => {
-        const faults = snap.faults || [];
+        const faults = (snap.faults || []).filter(f => !HIDDEN_FAULTS.has(f.fault_class));
         let tagsHtml;
         if (faults.length === 0) {
           tagsHtml = '<span class="snap-ok-tag">✓ Healthy</span>';

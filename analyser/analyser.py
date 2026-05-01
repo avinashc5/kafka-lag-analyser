@@ -20,6 +20,7 @@ Volume mounts (already in docker-compose):
 import asyncio
 import json
 import logging
+import math
 import os
 import pickle
 import sqlite3
@@ -65,6 +66,31 @@ fault_history: deque = deque(maxlen=200)
 current_faults: list = []
 # Each entry: {scrape_id, analyzed_at, faults: [...]}
 analysis_snapshots: deque = deque(maxlen=50)
+
+# ── JSON-safe scalar helpers ───────────────────────────────────────────────────
+
+
+def _safe_float(v) -> float | None:
+    """Convert v to a JSON-safe Python float; return None for NaN/Inf/invalid."""
+    try:
+        f = float(v)
+        return None if (math.isnan(f) or math.isinf(f)) else f
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_str(v, default: str = "unknown") -> str:
+    """Convert v to str, replacing None/NaN/NA with default."""
+    if v is None:
+        return default
+    try:
+        if math.isnan(float(v)):
+            return default
+    except (TypeError, ValueError):
+        pass
+    s = str(v)
+    return s if s not in ("nan", "NaN", "None", "NA", "<NA>") else default
+
 
 # ── Feature extractor dispatch ─────────────────────────────────────────────────
 
@@ -210,9 +236,9 @@ def _run_inference(
         for _, row in df_latest[df_latest["_pred"] == 1].iterrows():
             entity: dict = {}
             if "group_id" in keys:
-                entity["consumer_group"] = row.get("group_id", "unknown")
+                entity["consumer_group"] = _safe_str(row.get("group_id"))
             if "topic" in keys:
-                entity["topic"] = row.get("topic", "unknown")
+                entity["topic"] = _safe_str(row.get("topic"))
             if fault_class == "broker_saturation":
                 entity["scope"] = "broker"
             elif fault_class == "network_degradation":
@@ -222,8 +248,8 @@ def _run_inference(
                 "scrape_id": latest_id,
                 "fault_class": fault_class,
                 "entity": entity,
-                "features": {col: float(row[col]) for col in feature_cols},
-                "importances": importances,
+                "features": {col: _safe_float(row[col]) for col in feature_cols},
+                "importances": {k: _safe_float(v) or 0.0 for k, v in importances.items()},
                 "detected_at": datetime.now(timezone.utc).isoformat(),
             }
             events.append(event)
