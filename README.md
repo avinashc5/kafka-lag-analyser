@@ -30,3 +30,13 @@ python demo.py partition_skew
 python demo.py broker_saturation
 python demo.py network_degradation
 Optional flags: --scrapes N (default 13, i.e. ~130s of data), --top N (default top-5 features), --keep-alive (don't tear down after).
+
+### Running Web UI Demo
+1. Build and start everything
+docker compose up --build -d
+
+2. Wait ~2 minutes for Kafka to start and scraper to collect enough data (analyser needs at least WINDOW=5 scrapes before inference runs)
+
+3. Open the dashboards
+   Fault Analyser:  http://localhost:8000
+   Fault Injector:  http://localhost:8001

@@ -1,0 +1,7 @@
+{
+  "producer_rate": 1,
+  "num_partitions": 1,
+  "message_size_bytes": 100000,
+  "partition_strategy": "hash",
+  "consumer_mode": "rebalance_loop"
+}

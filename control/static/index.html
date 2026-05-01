@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kafka Fault Injector</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0; padding: 32px 40px;
+      background: #0f1117;
+      color: #e2e8f0;
+      line-height: 1.5;
+    }
+    h1 { margin: 0 0 4px; font-size: 1.7em; color: #f7fafc; }
+    .subtitle { color: #718096; margin: 0 0 28px; font-size: 0.95em; }
+    h2 { margin: 0 0 18px; font-size: 0.85em; color: #a0aec0; font-weight: 700;
+         letter-spacing: 0.1em; text-transform: uppercase; }
+    .card {
+      background: #1a1d27;
+      padding: 24px;
+      margin-bottom: 18px;
+      border-radius: 10px;
+      border: 1px solid #2d3748;
+    }
+    /* Control row */
+    .control-row { margin-bottom: 22px; }
+    .control-row:last-child { margin-bottom: 0; }
+    .control-label {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .control-label span { font-size: 0.95em; color: #cbd5e0; font-weight: 500; }
+    .control-value { font-size: 1.1em; font-weight: 700; color: #63b3ed; min-width: 80px; text-align: right; }
+    .fault-tag {
+      display: inline-block;
+      padding: 2px 10px; border-radius: 10px;
+      font-size: 0.75em; font-weight: 700;
+      margin-left: 8px;
+    }
+    .tag-ok     { background: #1c4532; color: #68d391; }
+    .tag-warn   { background: #5f370e; color: #fbd38d; }
+    .tag-danger { background: #521b1b; color: #fc8181; }
+    /* Slider */
+    .slider-wrap { position: relative; }
+    input[type=range] {
+      width: 100%; height: 6px; cursor: pointer;
+      -webkit-appearance: none; appearance: none;
+      background: #2d3748; border-radius: 3px; outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #63b3ed; cursor: pointer; border: 2px solid #1a1d27;
+    }
+    input[type=range]:hover::-webkit-slider-thumb { background: #90cdf4; }
+    .range-labels {
+      display: flex; justify-content: space-between;
+      font-size: 0.73em; color: #4a5568; margin-top: 4px;
+    }
+    .hint { font-size: 0.8em; color: #4a5568; margin-top: 6px; }
+    .hint strong { color: #718096; }
+    /* Radio group */
+    .radio-group { display: flex; gap: 16px; flex-wrap: wrap; }
+    .radio-option {
+      display: flex; align-items: center; gap: 8px;
+      background: #2d3748; padding: 10px 16px; border-radius: 8px;
+      cursor: pointer; border: 2px solid transparent; transition: border 0.15s;
+      user-select: none;
+    }
+    .radio-option:hover { border-color: #4a5568; }
+    .radio-option.selected { border-color: #63b3ed; background: #1e3a5f; }
+    .radio-option input { display: none; }
+    .radio-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid #4a5568; flex-shrink: 0;
+    }
+    .radio-option.selected .radio-dot { border-color: #63b3ed; background: #63b3ed; }
+    .radio-label { font-size: 0.9em; color: #cbd5e0; }
+    .radio-sublabel { font-size: 0.75em; color: #718096; margin-top: 2px; }
+    /* Status / active faults display */
+    .status-section { margin-top: 4px; }
+    .active-faults {
+      background: #12151f;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 56px;
+    }
+    .fault-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 6px 0; border-bottom: 1px solid #2d3748;
+    }
+    .fault-item:last-child { border-bottom: none; }
+    .fault-dot { width: 8px; height: 8px; border-radius: 50%; background: #fc8181; animation: pulse 1.2s infinite; flex-shrink: 0; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    .fault-name { font-weight: 600; color: #fc8181; font-size: 0.9em; }
+    .fault-reason { font-size: 0.8em; color: #718096; margin-left: 4px; }
+    .healthy-msg { color: #68d391; font-size: 0.9em; display: flex; align-items: center; gap: 8px; }
+    .healthy-dot { width: 8px; height: 8px; border-radius: 50%; background: #68d391; flex-shrink: 0; }
+    /* Buttons */
+    .btn-row { display: flex; gap: 12px; margin-top: 20px; }
+    button {
+      padding: 10px 24px; border-radius: 6px; border: none;
+      cursor: pointer; font-size: 0.92em; font-weight: 600; transition: background 0.15s;
+    }
+    .btn-primary { background: #3182ce; color: white; }
+    .btn-primary:hover { background: #2b6cb0; }
+    .btn-secondary { background: #2d3748; color: #cbd5e0; }
+    .btn-secondary:hover { background: #4a5568; }
+    .btn-danger { background: #c53030; color: white; }
+    .btn-danger:hover { background: #9b2c2c; }
+    /* Apply feedback */
+    .apply-msg { font-size: 0.85em; margin-left: 8px; opacity: 0; transition: opacity 0.3s; }
+    .apply-msg.show { opacity: 1; }
+    .apply-msg.ok { color: #68d391; }
+    .apply-msg.err { color: #fc8181; }
+    /* Link to analyser */
+    a.analyser-link {
+      display: inline-block; margin-bottom: 24px;
+      padding: 8px 16px; background: #2d3748; color: #90cdf4;
+      border-radius: 6px; text-decoration: none; font-size: 0.88em; font-weight: 600;
+    }
+    a.analyser-link:hover { background: #4a5568; }
+    .divider { border: none; border-top: 1px solid #2d3748; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h1>🎛️ Kafka Fault Injector</h1>
+  <p class="subtitle">Adjust cluster parameters to trigger specific fault conditions in real time.</p>
+
+  <a class="analyser-link" href="http://localhost:8000" target="_blank">📊 View Fault Analyser Dashboard →</a>
+
+  <!-- Producer Controls -->
+  <div class="card">
+    <h2>Producer</h2>
+
+    <!-- Producer rate -->
+    <div class="control-row">
+      <div class="control-label">
+        <span>
+          Producer Rate
+          <span class="fault-tag tag-ok" id="rate-tag">Normal</span>
+        </span>
+        <span class="control-value" id="rate-val">10 msg/s</span>
+      </div>
+      <div class="slider-wrap">
+        <input type="range" id="producer_rate" min="1" max="500" step="1" value="10"
+               oninput="onSlider(this)">
+        <div class="range-labels"><span>1 msg/s</span><span>500 msg/s</span></div>
+      </div>
+      <div class="hint">High rate → consumer falls behind → <strong>Slow Consumer</strong> fault</div>
+    </div>
+
+    <!-- Message size -->
+    <div class="control-row">
+      <div class="control-label">
+        <span>
+          Message Size
+          <span class="fault-tag tag-ok" id="size-tag">Normal</span>
+        </span>
+        <span class="control-value" id="size-val">100 B</span>
+      </div>
+      <div class="slider-wrap">
+        <input type="range" id="message_size_bytes" min="100" max="100000" step="100" value="100"
+               oninput="onSlider(this)">
+        <div class="range-labels"><span>100 B</span><span>100 KB</span></div>
+      </div>
+      <div class="hint">Large messages → high bytes_in → <strong>Broker Saturation</strong> fault</div>
+    </div>
+  </div>
+
+  <!-- Topic Controls -->
+  <div class="card">
+    <h2>Topic / Partitions</h2>
+
+    <!-- Partition count -->
+    <div class="control-row">
+      <div class="control-label">
+        <span>
+          Number of Partitions
+          <span class="fault-tag tag-ok" id="parts-tag">Default</span>
+        </span>
+        <span class="control-value" id="parts-val">6</span>
+      </div>
+      <div class="slider-wrap">
+        <input type="range" id="num_partitions" min="1" max="24" step="1" value="6"
+               oninput="onSlider(this)">
+        <div class="range-labels"><span>1</span><span>24</span></div>
+      </div>
+      <div class="hint">Drastic change (±2 from baseline) → consumer rebalancing → <strong>Rebalance Loops</strong> fault</div>
+    </div>
+
+    <!-- Partitioning strategy -->
+    <div class="control-row">
+      <div class="control-label">
+        <span>Partitioning Strategy</span>
+      </div>
+      <div class="radio-group" id="partition_strategy">
+        <label class="radio-option selected" data-value="hash">
+          <input type="radio" name="partition_strategy" value="hash" checked>
+          <div class="radio-dot"></div>
+          <div>
+            <div class="radio-label">Hash-based (default)</div>
+            <div class="radio-sublabel">Messages spread across all partitions</div>
+          </div>
+        </label>
+        <label class="radio-option" data-value="uniform">
+          <input type="radio" name="partition_strategy" value="uniform">
+          <div class="radio-dot"></div>
+          <div>
+            <div class="radio-label">Uniform (single partition)</div>
+            <div class="radio-sublabel">All messages → partition 0 → <strong style="color:#fbd38d">Partition Skew</strong></div>
+          </div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active fault preview + apply -->
+  <div class="card">
+    <h2>Active Fault Injection Preview</h2>
+    <div class="active-faults" id="fault-preview">
+      <div class="healthy-msg"><div class="healthy-dot"></div>No faults — healthy configuration</div>
+    </div>
+    <hr class="divider">
+    <div class="btn-row">
+      <button class="btn-primary" onclick="applyConfig()">Apply Changes</button>
+      <button class="btn-secondary" onclick="resetDefaults()">Reset to Defaults</button>
+      <span class="apply-msg" id="apply-msg"></span>
+    </div>
+  </div>
+
+  <script>
+    // ── Current config state ───────────────────────────────────────────────────
+    let config = {
+      producer_rate: 10,
+      num_partitions: 6,
+      message_size_bytes: 100,
+      partition_strategy: 'hash',
+      consumer_mode: 'healthy',
+    };
+
+    // ── Slider formatting helpers ──────────────────────────────────────────────
+    function fmtSize(bytes) {
+      if (bytes >= 1000) return (bytes / 1000).toFixed(0) + ' KB';
+      return bytes + ' B';
+    }
+
+    function rateTag(rate) {
+      if (rate <= 30)  return ['Normal', 'tag-ok'];
+      if (rate <= 150) return ['High', 'tag-warn'];
+      return ['Flooding', 'tag-danger'];
+    }
+
+    function sizeTag(bytes) {
+      if (bytes <= 1000)  return ['Normal', 'tag-ok'];
+      if (bytes <= 10000) return ['Medium', 'tag-warn'];
+      return ['Large', 'tag-danger'];
+    }
+
+    function partsTag(parts) {
+      const delta = Math.abs(parts - 6);  // vs original default
+      if (delta < 2) return ['Default', 'tag-ok'];
+      if (delta < 5) return ['Changed', 'tag-warn'];
+      return ['Drastic', 'tag-danger'];
+    }
+
+    function setTag(el, label, cls) {
+      el.textContent = label;
+      el.className = 'fault-tag ' + cls;
+    }
+
+    // ── Slider input handler ───────────────────────────────────────────────────
+    function onSlider(el) {
+      const val = parseFloat(el.value);
+      config[el.id] = val;
+
+      if (el.id === 'producer_rate') {
+        document.getElementById('rate-val').textContent = val + ' msg/s';
+        const [lbl, cls] = rateTag(val);
+        setTag(document.getElementById('rate-tag'), lbl, cls);
+      } else if (el.id === 'message_size_bytes') {
+        document.getElementById('size-val').textContent = fmtSize(val);
+        const [lbl, cls] = sizeTag(val);
+        setTag(document.getElementById('size-tag'), lbl, cls);
+      } else if (el.id === 'num_partitions') {
+        document.getElementById('parts-val').textContent = val;
+        const [lbl, cls] = partsTag(val);
+        setTag(document.getElementById('parts-tag'), lbl, cls);
+      }
+      updateFaultPreview();
+    }
+
+    // ── Radio button handler ───────────────────────────────────────────────────
+    document.querySelectorAll('.radio-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const grp = opt.closest('.radio-group');
+        grp.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        opt.querySelector('input').checked = true;
+        config.partition_strategy = opt.dataset.value;
+        updateFaultPreview();
+      });
+    });
+
+    // ── Fault preview ──────────────────────────────────────────────────────────
+    function updateFaultPreview() {
+      const faults = [];
+
+      if (config.producer_rate > 150) {
+        faults.push({ name: 'Slow Consumer', reason: `producer at ${config.producer_rate} msg/s overwhelms consumer` });
+      } else if (config.producer_rate > 30) {
+        faults.push({ name: 'Slow Consumer (possible)', reason: `high producer rate may cause lag` });
+      }
+
+      if (config.message_size_bytes > 10000) {
+        faults.push({ name: 'Broker Saturation', reason: `${fmtSize(config.message_size_bytes)} messages → high bytes_in` });
+      } else if (config.message_size_bytes > 1000) {
+        faults.push({ name: 'Broker Saturation (possible)', reason: `medium message size` });
+      }
+
+      if (Math.abs(config.num_partitions - 6) >= 2) {
+        faults.push({ name: 'Rebalance Loops', reason: `partition count changed to ${config.num_partitions} (δ ≥ 2 from baseline)` });
+      }
+
+      if (config.partition_strategy === 'uniform') {
+        faults.push({ name: 'Partition Skew', reason: 'all messages routed to partition 0' });
+      }
+
+      const preview = document.getElementById('fault-preview');
+      if (faults.length === 0) {
+        preview.innerHTML = '<div class="healthy-msg"><div class="healthy-dot"></div>No faults — healthy configuration</div>';
+      } else {
+        preview.innerHTML = faults.map(f =>
+          `<div class="fault-item">
+            <div class="fault-dot"></div>
+            <span class="fault-name">${f.name}</span>
+            <span class="fault-reason">&mdash; ${f.reason}</span>
+          </div>`
+        ).join('');
+      }
+    }
+
+    // ── Apply / reset ──────────────────────────────────────────────────────────
+    async function applyConfig() {
+      const payload = {
+        producer_rate: config.producer_rate,
+        num_partitions: config.num_partitions,
+        message_size_bytes: config.message_size_bytes,
+        partition_strategy: config.partition_strategy,
+      };
+      try {
+        const res = await fetch('/api/control', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const updated = await res.json();
+        config.consumer_mode = updated.consumer_mode;
+        showMsg('✓ Applied', 'ok');
+      } catch (e) {
+        showMsg('✗ Error: ' + e.message, 'err');
+      }
+    }
+
+    async function resetDefaults() {
+      try {
+        const res = await fetch('/api/control/reset', { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await loadConfig();
+        showMsg('✓ Reset to defaults', 'ok');
+      } catch (e) {
+        showMsg('✗ Error: ' + e.message, 'err');
+      }
+    }
+
+    function showMsg(text, cls) {
+      const el = document.getElementById('apply-msg');
+      el.textContent = text;
+      el.className = 'apply-msg show ' + cls;
+      setTimeout(() => { el.className = 'apply-msg'; }, 3000);
+    }
+
+    // ── Load current config on page load ──────────────────────────────────────
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/control');
+        const data = await res.json();
+        config = data;
+
+        document.getElementById('producer_rate').value = data.producer_rate;
+        document.getElementById('rate-val').textContent = data.producer_rate + ' msg/s';
+        const [rl, rc] = rateTag(data.producer_rate);
+        setTag(document.getElementById('rate-tag'), rl, rc);
+
+        document.getElementById('message_size_bytes').value = data.message_size_bytes;
+        document.getElementById('size-val').textContent = fmtSize(data.message_size_bytes);
+        const [sl, sc] = sizeTag(data.message_size_bytes);
+        setTag(document.getElementById('size-tag'), sl, sc);
+
+        document.getElementById('num_partitions').value = data.num_partitions;
+        document.getElementById('parts-val').textContent = data.num_partitions;
+        const [pl, pc] = partsTag(data.num_partitions);
+        setTag(document.getElementById('parts-tag'), pl, pc);
+
+        document.querySelectorAll('.radio-option').forEach(opt => {
+          opt.classList.toggle('selected', opt.dataset.value === data.partition_strategy);
+          const inp = opt.querySelector('input');
+          inp.checked = (opt.dataset.value === data.partition_strategy);
+        });
+
+        updateFaultPreview();
+      } catch (e) {
+        console.error('Could not load config:', e);
+      }
+    }
+
+    loadConfig();
+  </script>
+</body>
+</html>
