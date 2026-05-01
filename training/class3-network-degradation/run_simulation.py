@@ -21,8 +21,8 @@ def main():
     print("Starting simulation framework for Class 3 (Network Degradation)....")
 
     subprocess.run(["docker", "compose", "up", "-d", "--build"], check=True)
-    print("Waiting 90 seconds for cluster, producer, and consumer to warm up...")
-    time.sleep(90)
+    print("Waiting 30 seconds for cluster, producer, and consumer to warm up...")
+    time.sleep(30)
 
     phases = []
     cycles = 10
@@ -40,8 +40,8 @@ def main():
 
         print("[*] Entering Fault State: Network Degradation")
         # Spike client->broker latency (affects fetch and produce total time)
-        set_network_delay("consumer", delay="200ms", enable=True)
-        set_network_delay("producer", delay="200ms", enable=True)
+        set_network_delay("consumer", delay="400ms", enable=True)
+        set_network_delay("producer", delay="400ms", enable=True)
         start_time = utc_now()
         time.sleep(duration_per_phase)
         phases.append((start_time, utc_now(), "fault", "network_degradation"))
