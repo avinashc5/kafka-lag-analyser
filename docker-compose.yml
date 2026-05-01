@@ -12,12 +12,17 @@ services:
   producer:
     build: ./producer
     container_name: producer
+    environment:
+      - FAULT_MODE=${PRODUCER_FAULT_MODE:-healthy}
     depends_on:
       - kafka
 
   consumer:
     build: ./consumer
     container_name: consumer
+    restart: on-failure
+    environment:
+      - FAULT_MODE=${CONSUMER_FAULT_MODE:-healthy}
     volumes:
       - ./consumer:/app
     depends_on:
@@ -30,6 +35,8 @@ services:
     container_name: analyser
     ports:
       - "8000:8000"
+    environment:
+      - ANALYSIS_INTERVAL_SECONDS=10
     volumes:
       - ./data:/app/data
       - ./models:/app/models

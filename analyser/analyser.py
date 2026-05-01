@@ -1,17 +1,37 @@
+"""
+Kafka fault-detection analysis module.
+
+Runs every ANALYSIS_INTERVAL_SECONDS (default: 10).  Each cycle:
+  1. Computes window_start = now - 10 × ANALYSIS_INTERVAL_SECONDS.
+  2. Finds the earliest scrape_id whose scraped_at >= window_start.
+     If all data is within the window (started recently), this is just
+     the first ever scrape_id — i.e. we load from the beginning.
+  3. Loads all sessions, jmx_samples, and group_lag_samples from that
+     scrape_id onward.
+  4. Extracts features for each trained model (same logic as training).
+  5. Runs inference against the latest scrape_id.
+  6. Logs results to stdout and exposes them via /api/faults.
+
+Volume mounts (already in docker-compose):
+  ./data:/app/data      →  metrics.db written by the scraper container
+  ./models:/app/models  →  trained XGBoost pickles
+"""
+
 import asyncio
 import json
 import logging
+import os
+import pickle
 import sqlite3
 from collections import deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import pickle
 
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-# We import the extraction logic from the ml directory.
 from ml.data import WINDOW
 from ml.features import (
     extract_broker_saturation,
@@ -22,55 +42,87 @@ from ml.features import (
 )
 from ml.train import ENTITY_KEYS
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger("analyser")
 
-app = FastAPI(title="Kafka Lag Analyser API")
+# ── Configuration ──────────────────────────────────────────────────────────────
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-# Assumes the analyser is run from the project root OR the container
-# mounts the data and models directories in predictable locations.
-DB_PATH = Path("data/metrics.db")
-MODELS_DIR = Path("models")
+ANALYSIS_INTERVAL_SECONDS = int(os.getenv("ANALYSIS_INTERVAL_SECONDS", "10"))
+DB_PATH = Path(os.getenv("DB_PATH", "data/metrics.db"))
+MODELS_DIR = Path(os.getenv("MODELS_DIR", "models"))
 
-# ── Global State ───────────────────────────────────────────────────────────────
-models = {}
-# Keep a rolling history of the last 100 detected faults
-fault_history = deque(maxlen=100)
-# Track the most recent fault state
-current_faults = []
-# Track last processed scrape_id so we don't re-process
-last_processed_scrape_id = -1
+WINDOW_SECONDS = 10 * ANALYSIS_INTERVAL_SECONDS
 
-# ── Database query helpers ─────────────────────────────────────────────────────
+# ── App + shared state ─────────────────────────────────────────────────────────
 
-def load_recent_data(db_path: Path, last_n: int = WINDOW * 2) -> tuple:
+app = FastAPI(title="Kafka Fault Analyser")
+
+models: dict = {}
+fault_history: deque = deque(maxlen=200)
+current_faults: list = []
+
+# ── Feature extractor dispatch ─────────────────────────────────────────────────
+
+_EXTRACTORS = {
+    "slow_consumer":      lambda jmx, lag, sess: extract_slow_consumer(jmx, lag),
+    "rebalance_loops":    lambda jmx, lag, sess: extract_rebalance_loops(jmx, lag),
+    "partition_skew":     lambda jmx, lag, sess: extract_partition_skew(jmx, lag),
+    "broker_saturation":  lambda jmx, lag, sess: extract_broker_saturation(jmx, sess),
+    "network_degradation": lambda jmx, lag, sess: extract_network_delay(jmx, sess),
+}
+
+# ── Data loading ───────────────────────────────────────────────────────────────
+
+
+def _load_window_data(db_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | None:
     """
-    Fetch the last `last_n` scrapes from the metrics DB.
-    We fetch WINDOW*2 scrapes so rolling features (slopes, std) over the most
-    recent WINDOW points have a full window of prior context to work from.
+    Load scrapes covering the last WINDOW_SECONDS of data.
+
+    Finds the earliest scrape_id whose scraped_at >= window_start, then
+    fetches all rows from that id upward.  If the DB was started recently
+    and all data falls within the window, the very first scrape_id is used
+    (i.e. we load from the beginning).
+
+    Returns (sessions, jmx, lag) or None when the DB has no usable data.
     """
     if not db_path.exists():
-        return None, pd.DataFrame(), pd.DataFrame()
+        return None
+
+    window_start = (
+        datetime.now(timezone.utc) - timedelta(seconds=WINDOW_SECONDS)
+    ).isoformat()
 
     with sqlite3.connect(db_path) as conn:
-        # Get recent sessions
+        # Earliest scrape in the window.  If window_start predates all data
+        # this returns the minimum id in the table (started-recently case).
+        row = conn.execute(
+            "SELECT MIN(id) FROM scrape_sessions WHERE scraped_at >= ?",
+            (window_start,),
+        ).fetchone()
+
+        if row[0] is None:
+            # No sessions at all (empty DB) — nothing to do yet.
+            return None
+
+        first_id: int = row[0]
+
         sessions = pd.read_sql(
-            "SELECT id FROM scrape_sessions ORDER BY id DESC LIMIT ?",
+            "SELECT id FROM scrape_sessions WHERE id >= ? ORDER BY id",
             conn,
-            params=(last_n,),
+            params=(first_id,),
         )
         if sessions.empty:
-            return None, pd.DataFrame(), pd.DataFrame()
+            return None
 
-        sessions = sessions.sort_values("id")  # sort chronologically
         scrape_ids = sessions["id"].tolist()
         placeholders = ",".join("?" * len(scrape_ids))
 
-        # Fetch related JMX and LAG data
         jmx_raw = pd.read_sql(
-            f"SELECT scrape_id, metric_name, value, labels FROM jmx_samples "
-            f"WHERE scrape_id IN ({placeholders})",
+            f"SELECT scrape_id, metric_name, value, labels "
+            f"FROM jmx_samples WHERE scrape_id IN ({placeholders})",
             conn,
             params=scrape_ids,
         )
@@ -83,168 +135,182 @@ def load_recent_data(db_path: Path, last_n: int = WINDOW * 2) -> tuple:
         )
 
     if jmx_raw.empty and lag.empty:
-        return None, pd.DataFrame(), pd.DataFrame()
+        return None
 
-    # Parse JSON labels (similar to ml.data)
+    # Expand JSON labels → topic / partition / request columns
     if not jmx_raw.empty:
         parsed = jmx_raw["labels"].apply(json.loads)
         jmx = jmx_raw.drop(columns=["labels"]).copy()
-        jmx["topic"] = parsed.apply(lambda d: d.get("topic"))
+        jmx["topic"]     = parsed.apply(lambda d: d.get("topic"))
         jmx["partition"] = parsed.apply(lambda d: d.get("partition"))
-        jmx["request"] = parsed.apply(lambda d: d.get("request"))
+        jmx["request"]   = parsed.apply(lambda d: d.get("request"))
     else:
-        jmx = pd.DataFrame(columns=["scrape_id", "metric_name", "value", "topic", "partition", "request"])
+        jmx = pd.DataFrame(
+            columns=["scrape_id", "metric_name", "value", "topic", "partition", "request"]
+        )
 
     return sessions, jmx, lag
 
 
-def _extract(fault_class: str, jmx: pd.DataFrame, lag: pd.DataFrame, sessions: pd.DataFrame) -> pd.DataFrame:
-    """Wrapper matching the train.py extraction."""
-    if fault_class == "slow_consumer":
-        return extract_slow_consumer(jmx, lag)
-    if fault_class == "rebalance_loops":
-        return extract_rebalance_loops(jmx, lag)
-    if fault_class == "partition_skew":
-        return extract_partition_skew(jmx, lag)
-    if fault_class == "broker_saturation":
-        return extract_broker_saturation(jmx, sessions)
-    if fault_class == "network_degradation":
-        return extract_network_delay(jmx, sessions)
-    raise ValueError(f"Unknown fault class: {fault_class!r}")
+# ── Inference ──────────────────────────────────────────────────────────────────
 
 
-# ── Background Worker ──────────────────────────────────────────────────────────
+def _run_inference(
+    sessions: pd.DataFrame,
+    jmx: pd.DataFrame,
+    lag: pd.DataFrame,
+) -> list[dict]:
+    """
+    For each loaded model:
+      1. Extract features over the full loaded window (rolling features need
+         prior context, so we pass all loaded scrapes).
+      2. Filter to rows belonging to the latest scrape_id only.
+      3. Predict and collect fault events.
+    """
+    latest_id = int(sessions["id"].max())
+    events: list[dict] = []
 
-async def inference_loop():
-    """Poll pipeline evaluating new scrapes against loaded models."""
-    global last_processed_scrape_id, current_faults, fault_history
+    for fault_class, model in models.items():
+        extractor = _EXTRACTORS.get(fault_class)
+        if extractor is None:
+            continue
 
-    logger.info("Starting inference loop...")
-    while True:
         try:
-            if not DB_PATH.exists():
-                await asyncio.sleep(5)
+            df = extractor(jmx, lag, sessions)
+        except Exception as exc:
+            logger.error("Feature extraction failed [%s]: %s", fault_class, exc)
+            continue
+
+        if df.empty:
+            continue
+
+        df_latest = df[df["scrape_id"] == latest_id].copy()
+        if df_latest.empty:
+            continue
+
+        keys = ENTITY_KEYS.get(fault_class, ["scrape_id"])
+        feature_cols = [c for c in df_latest.columns if c not in keys]
+        if not feature_cols:
+            continue
+
+        try:
+            X = df_latest[feature_cols].astype(float)
+            preds = model.predict(X)
+        except Exception as exc:
+            logger.error("Prediction failed [%s]: %s", fault_class, exc)
+            continue
+
+        df_latest = df_latest.copy()
+        df_latest["_pred"] = preds
+
+        for _, row in df_latest[df_latest["_pred"] == 1].iterrows():
+            entity: dict = {}
+            if "group_id" in keys:
+                entity["consumer_group"] = row.get("group_id", "unknown")
+            if "topic" in keys:
+                entity["topic"] = row.get("topic", "unknown")
+            if fault_class == "broker_saturation":
+                entity["scope"] = "broker"
+            elif fault_class == "network_degradation":
+                entity["scope"] = "global"
+
+            event = {
+                "scrape_id": latest_id,
+                "fault_class": fault_class,
+                "entity": entity,
+                "features": {col: float(row[col]) for col in feature_cols},
+                "detected_at": datetime.now(timezone.utc).isoformat(),
+            }
+            events.append(event)
+            logger.warning("FAULT  %-22s | entity=%s", fault_class, entity)
+
+    return events
+
+
+# ── Main analysis loop ─────────────────────────────────────────────────────────
+
+
+async def _analysis_loop() -> None:
+    global current_faults, fault_history
+
+    logger.info(
+        "Analysis loop started — interval=%ds, data window=%ds",
+        ANALYSIS_INTERVAL_SECONDS,
+        WINDOW_SECONDS,
+    )
+
+    while True:
+        await asyncio.sleep(ANALYSIS_INTERVAL_SECONDS)
+
+        try:
+            result = _load_window_data(DB_PATH)
+            if result is None:
+                logger.debug("No data yet, waiting…")
                 continue
 
-            # Quick check if there's a new scrape
-            with sqlite3.connect(DB_PATH) as conn:
-                cur = conn.execute("SELECT MAX(id) FROM scrape_sessions")
-                row = cur.fetchone()
-            latest_id = row[0] if row else None
+            sessions, jmx, lag = result
+            latest_id = int(sessions["id"].max())
+            logger.info(
+                "Loaded %d scrapes (IDs %d–%d) — running inference…",
+                len(sessions),
+                int(sessions["id"].min()),
+                latest_id,
+            )
 
-            if latest_id is None or latest_id <= last_processed_scrape_id:
-                await asyncio.sleep(2)
-                continue
+            events = _run_inference(sessions, jmx, lag)
+            current_faults = events
+            fault_history.extend(events)
 
-            logger.info(f"Processing new scrape_id: {latest_id}")
-            sessions, jmx, lag = load_recent_data(DB_PATH, last_n=WINDOW + 1)
-            if sessions is None:
-                await asyncio.sleep(2)
-                continue
+            if not events:
+                logger.info("No faults detected (scrape_id=%d)", latest_id)
 
-            new_faults = []
+        except Exception as exc:
+            logger.error("Analysis cycle error: %s", exc, exc_info=True)
 
-            for fault_class, model in models.items():
-                try:
-                    df = _extract(fault_class, jmx, lag, sessions)
-                    if df.empty:
-                        continue
 
-                    # We only care about predicting for the most recent scrape
-                    df_latest = df[df["scrape_id"] == latest_id].copy()
-                    if df_latest.empty:
-                        continue
-
-                    # Separate Entity Keys vs Features
-                    keys = ENTITY_KEYS.get(fault_class, ["scrape_id"])
-
-                    feature_cols = [c for c in df_latest.columns if c not in keys and c != "fault"]
-                    if not feature_cols:
-                        continue
-
-                    # Run prediction
-                    X = df_latest[feature_cols].astype(float)
-                    preds = model.predict(X)
-
-                    df_latest["prediction"] = preds
-
-                    # Filter rows where a fault was detected (prediction == 1)
-                    detected = df_latest[df_latest["prediction"] == 1]
-
-                    for _, row_data in detected.iterrows():
-                        # Extract the key entity identifying the fault
-                        entity = {}
-                        if "group_id" in keys:
-                            entity["consumer_group"] = row_data.get("group_id", "unknown")
-                        if "topic" in keys:
-                            entity["topic"] = row_data.get("topic", "unknown")
-
-                        # Set default scope for global ones
-                        if fault_class == "broker_saturation":
-                            entity["broker"] = "broker-0"
-                        if fault_class == "network_degradation":
-                            entity["scope"] = "global"
-
-                        fault_event = {
-                            "scrape_id": latest_id,
-                            "fault_class": fault_class,
-                            "entity": entity,
-                            "trigger_values": {col: float(row_data[col]) for col in feature_cols}
-                        }
-                        new_faults.append(fault_event)
-                        fault_history.append(fault_event)
-                        logger.warning(f"Detected FAULT: {fault_class} for {entity}")
-
-                except Exception as e:
-                    logger.error(f"Error evaluating {fault_class}: {e}")
-
-            current_faults = new_faults
-            last_processed_scrape_id = latest_id
-
-        except Exception as e:
-            logger.error(f"Inference loop error: {e}")
-
-        await asyncio.sleep(2)
+# ── Startup ────────────────────────────────────────────────────────────────────
 
 
 @app.on_event("startup")
-async def startup_event():
-    # Load all available .pkl models
-    if MODELS_DIR.exists():
-        for p in MODELS_DIR.glob("*.pkl"):
-            fault_class = p.stem
-            try:
-                with open(p, "rb") as f:
-                    payload = pickle.load(f)
-                models[fault_class] = payload["model"] if isinstance(payload, dict) else payload
-                logger.info(f"Loaded model for {fault_class}")
-            except Exception as e:
-                logger.error(f"Failed to load {fault_class} model: {e}")
+async def _startup() -> None:
+    for pkl_path in MODELS_DIR.glob("*.pkl"):
+        fault_class = pkl_path.stem
+        try:
+            with open(pkl_path, "rb") as f:
+                payload = pickle.load(f)
+            models[fault_class] = payload["model"] if isinstance(payload, dict) else payload
+            logger.info("Loaded model: %s", fault_class)
+        except Exception as exc:
+            logger.error("Failed to load %s: %s", pkl_path, exc)
 
     if not models:
-        logger.warning(f"No trained models found in {MODELS_DIR}. Inference will run but detect nothing.")
+        logger.warning(
+            "No models found in %s — inference will produce no detections.", MODELS_DIR
+        )
 
-    # Start the background task
-    asyncio.create_task(inference_loop())
+    asyncio.create_task(_analysis_loop())
 
 
-# ── API Endpoints ──────────────────────────────────────────────────────────────
+# ── REST API ───────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/faults")
 async def get_faults():
-    """
-    Returns the currently active faults, as well as a short history of past faults.
-    """
     return {
         "current": current_faults,
-        "history": list(fault_history)
+        "history": list(fault_history),
     }
 
-# Mount the static directory
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent / "static"),
+    name="static",
+)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    """Serve the static frontend UI"""
-    frontend_path = Path(__file__).parent / "static" / "index.html"
-    return HTMLResponse(content=frontend_path.read_text(), status_code=200)
+    return HTMLResponse(
+        content=(Path(__file__).parent / "static" / "index.html").read_text()
+    )
