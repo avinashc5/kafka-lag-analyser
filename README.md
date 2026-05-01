@@ -1,3 +1,10 @@
+# Members
+Avinash Chaudhari - 23b1064 <br>
+Tejas Chaudhari - 23b0932 <br>
+Hari Shankar Karthik - 23b0907 <br>
+Rishi Kalra - 23b1081 <br>
+
+
 # Kafka Lag Analyser Setup
 
 This project uses **Kafka 4.1.2**.
