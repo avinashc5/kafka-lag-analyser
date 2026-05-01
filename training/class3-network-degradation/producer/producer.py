@@ -2,12 +2,11 @@ from kafka import KafkaProducer
 from kafka.admin import KafkaAdminClient, NewTopic
 import time, random
 
-BOOTSTRAP = "kafka:9092,kafka2:9092"
+BOOTSTRAP = "kafka:9092"
 
 while True:
     try:
-        # Require acks from both the leader AND the follower (broker 2)
-        producer = KafkaProducer(bootstrap_servers=BOOTSTRAP, acks="all")
+        producer = KafkaProducer(bootstrap_servers=BOOTSTRAP, acks=1)
         print("[Producer] Connected.")
         break
     except Exception as e:
@@ -16,7 +15,7 @@ while True:
 
 try:
     admin = KafkaAdminClient(bootstrap_servers=BOOTSTRAP)
-    admin.create_topics([NewTopic(name="test-topic", num_partitions=6, replication_factor=2)])
+    admin.create_topics([NewTopic(name="test-topic", num_partitions=6, replication_factor=1)])
     print("[Producer] Created topic")
 except Exception:
     pass
