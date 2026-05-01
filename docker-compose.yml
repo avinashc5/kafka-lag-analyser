@@ -12,8 +12,8 @@ services:
   producer:
     build: ./producer
     container_name: producer
-    environment:
-      - FAULT_MODE=${PRODUCER_FAULT_MODE:-healthy}
+    volumes:
+      - ./data:/app/data
     depends_on:
       - kafka
 
@@ -21,10 +21,9 @@ services:
     build: ./consumer
     container_name: consumer
     restart: on-failure
-    environment:
-      - FAULT_MODE=${CONSUMER_FAULT_MODE:-healthy}
     volumes:
       - ./consumer:/app
+      - ./data:/app/data
     depends_on:
       - kafka
 
@@ -43,6 +42,17 @@ services:
     depends_on:
       - scraper
 
+  control:
+    build:
+      context: .
+      dockerfile: control/Dockerfile
+    container_name: control
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - kafka
 
   scraper:
     build: ./scraper

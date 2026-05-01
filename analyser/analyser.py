@@ -63,6 +63,8 @@ app = FastAPI(title="Kafka Fault Analyser")
 models: dict = {}
 fault_history: deque = deque(maxlen=200)
 current_faults: list = []
+# Each entry: {scrape_id, analyzed_at, faults: [...]}
+analysis_snapshots: deque = deque(maxlen=50)
 
 # ── Feature extractor dispatch ─────────────────────────────────────────────────
 
@@ -96,15 +98,12 @@ def _load_window_data(db_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     ).isoformat()
 
     with sqlite3.connect(db_path) as conn:
-        # Earliest scrape in the window.  If window_start predates all data
-        # this returns the minimum id in the table (started-recently case).
         row = conn.execute(
             "SELECT MIN(id) FROM scrape_sessions WHERE scraped_at >= ?",
             (window_start,),
         ).fetchone()
 
         if row[0] is None:
-            # No sessions at all (empty DB) — nothing to do yet.
             return None
 
         first_id: int = row[0]
@@ -137,7 +136,6 @@ def _load_window_data(db_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.Dat
     if jmx_raw.empty and lag.empty:
         return None
 
-    # Expand JSON labels → topic / partition / request columns
     if not jmx_raw.empty:
         parsed = jmx_raw["labels"].apply(json.loads)
         jmx = jmx_raw.drop(columns=["labels"]).copy()
@@ -162,10 +160,9 @@ def _run_inference(
 ) -> list[dict]:
     """
     For each loaded model:
-      1. Extract features over the full loaded window (rolling features need
-         prior context, so we pass all loaded scrapes).
+      1. Extract features over the full loaded window.
       2. Filter to rows belonging to the latest scrape_id only.
-      3. Predict and collect fault events.
+      3. Predict and collect fault events with feature importances.
     """
     latest_id = int(sessions["id"].max())
     events: list[dict] = []
@@ -200,6 +197,13 @@ def _run_inference(
             logger.error("Prediction failed [%s]: %s", fault_class, exc)
             continue
 
+        # Feature importances from the trained model
+        try:
+            trained_names = model.get_booster().feature_names or feature_cols
+            importances = dict(zip(trained_names, map(float, model.feature_importances_)))
+        except Exception:
+            importances = {col: 0.0 for col in feature_cols}
+
         df_latest = df_latest.copy()
         df_latest["_pred"] = preds
 
@@ -219,6 +223,7 @@ def _run_inference(
                 "fault_class": fault_class,
                 "entity": entity,
                 "features": {col: float(row[col]) for col in feature_cols},
+                "importances": importances,
                 "detected_at": datetime.now(timezone.utc).isoformat(),
             }
             events.append(event)
@@ -231,7 +236,7 @@ def _run_inference(
 
 
 async def _analysis_loop() -> None:
-    global current_faults, fault_history
+    global current_faults, fault_history, analysis_snapshots
 
     logger.info(
         "Analysis loop started — interval=%ds, data window=%ds",
@@ -243,7 +248,8 @@ async def _analysis_loop() -> None:
         await asyncio.sleep(ANALYSIS_INTERVAL_SECONDS)
 
         try:
-            result = _load_window_data(DB_PATH)
+            # Run blocking DB + inference in a thread so the event loop stays responsive
+            result = await asyncio.to_thread(_load_window_data, DB_PATH)
             if result is None:
                 logger.debug("No data yet, waiting…")
                 continue
@@ -257,9 +263,16 @@ async def _analysis_loop() -> None:
                 latest_id,
             )
 
-            events = _run_inference(sessions, jmx, lag)
+            events = await asyncio.to_thread(_run_inference, sessions, jmx, lag)
             current_faults = events
             fault_history.extend(events)
+
+            snapshot = {
+                "scrape_id": latest_id,
+                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                "faults": events,
+            }
+            analysis_snapshots.append(snapshot)
 
             if not events:
                 logger.info("No faults detected (scrape_id=%d)", latest_id)
@@ -299,6 +312,7 @@ async def get_faults():
     return {
         "current": current_faults,
         "history": list(fault_history),
+        "snapshots": list(analysis_snapshots),
     }
 
 
