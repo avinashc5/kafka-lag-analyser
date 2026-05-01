@@ -107,16 +107,35 @@ rules:
     name: "kafka_server_replicafetchermanager_maxlag"
     type: GAUGE
 
+  # ── Replication health (additional) ──
+  # Produces: kafka_server_replicamanager_underminisrpartitioncount
+  - pattern: "kafka.server<type=ReplicaManager, name=UnderMinIsrPartitionCount><>Value"
+    name: "kafka_server_replicamanager_underminisrpartitioncount"
+    type: GAUGE
+
   # ── Controller ──
   # Produces: kafka_controller_kafkacontroller_<name>
   - pattern: "kafka.controller<type=KafkaController, name=OfflinePartitionsCount><>Value"
     name: "kafka_controller_kafkacontroller_offlinepartitionscount"
     type: GAUGE
 
+  # Produces: kafka_controller_kafkacontroller_activecontrollercount
+  - pattern: "kafka.controller<type=KafkaController, name=ActiveControllerCount><>Value"
+    name: "kafka_controller_kafkacontroller_activecontrollercount"
+    type: GAUGE
+
   # ── Group Coordinator (rebalance state) ──
   # Produces: kafka_coordinator_group_groupmetadatamanager_<name>
-  - pattern: "kafka.coordinator.group<type=GroupMetadataManager, name=(NumGroups|NumGroupsPreparingRebalance|NumGroupsCompletingRebalance|NumGroupsStable)><>Value"
+  - pattern: "kafka.coordinator.group<type=GroupMetadataManager, name=(NumGroups|NumGroupsPreparingRebalance|NumGroupsCompletingRebalance|NumGroupsStable|NumGroupsDead)><>Value"
     name: "kafka_coordinator_group_groupmetadatamanager_$1"
+    type: GAUGE
+
+  # ── Request latency: ResponseQueueTimeMs ──
+  # Produces: kafka_network_requestmetrics_responsequeuetimems_99thpercentile{request="..."}
+  - pattern: "kafka.network<type=RequestMetrics, name=ResponseQueueTimeMs, request=(Produce|FetchConsumer)><>99thPercentile"
+    name: "kafka_network_requestmetrics_responsequeuetimems_99thpercentile"
+    labels:
+      request: "$1"
     type: GAUGE
 
   # ── Per-partition log positions (for skew detection) ──

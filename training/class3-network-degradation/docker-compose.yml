@@ -13,45 +13,40 @@ services:
     ports:
       - "9092:9092"
       - "9101:9101"
-
-  kafka2:
-    build:
-      context: ../../
-      dockerfile: training/class3-network-degradation/broker/Dockerfile
-      network: host
-    command: ["bash", "./start_custom.sh", "server2.properties"]
-    volumes:
-      - ./broker/start_custom.sh:/kafka/start_custom.sh
-      - ./broker/server2.properties:/kafka/server2.properties
-    cap_add:
-      - NET_ADMIN
-    ports:
-      - "9094:9092"
-      - "9102:9101"
+    healthcheck:
+      test: ["CMD", "/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "kafka:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
 
   producer:
     build:
       context: ./producer
       network: host
     depends_on:
-      - kafka
-      - kafka2
+      kafka:
+        condition: service_healthy
     cap_add:
       - NET_ADMIN
+    restart: on-failure
 
   consumer:
     build:
       context: ./consumer
       network: host
     depends_on:
-      - kafka
-      - kafka2
+      kafka:
+        condition: service_healthy
     cap_add:
       - NET_ADMIN
+    restart: on-failure
 
   scraper:
     build:
       context: ../../scraper
       network: host
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+    restart: on-failure

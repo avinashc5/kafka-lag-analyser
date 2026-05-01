@@ -32,7 +32,7 @@ JMX_TARGET_PREFIXES = [
     "kafka_network_requestmetrics_remotetimems",  # Class 3: inter-broker wait
     "kafka_network_requestmetrics_responsesendtimems",  # Class 3: broker→client link
     "kafka_network_requestmetrics_requestqueuetimems",  # Class 2: queue backlog
-    # "kafka_network_requestmetrics_responsequeuetimems",
+    "kafka_network_requestmetrics_responsequeuetimems",  # Class 2: queue backlog (outbound)
     # Request rates (JoinGroup / SyncGroup signal rebalancing)
     "kafka_network_requestmetrics_requestspersec",  # Class 1: Rebalance Loops
     # Broker thread utilisation
@@ -40,17 +40,17 @@ JMX_TARGET_PREFIXES = [
     "kafka_network_socketserver_networkprocessoravgidlepercent",  # Class 2
     # Replication health
     "kafka_server_replicamanager_underreplicatedpartitions",  # Class 3
-    # "kafka_server_replicamanager_underminisrpartitioncount",
+    "kafka_server_replicamanager_underminisrpartitioncount",  # Class 3: ISR degradation
     "kafka_server_replicafetchermanager_maxlag",  # Class 3: inter-broker lag
     # Controller
     "kafka_controller_kafkacontroller_offlinepartitionscount",
-    # "kafka_controller_kafkacontroller_activecontrollercount",
+    "kafka_controller_kafkacontroller_activecontrollercount",  # controller health
     # Consumer group coordinator (rebalance state)          # Class 1
     "kafka_coordinator_group_groupmetadatamanager_numgroups",
     "kafka_coordinator_group_groupmetadatamanager_numgroupspreparingrebalance",
     "kafka_coordinator_group_groupmetadatamanager_numgroupscompletingrebalance",
     "kafka_coordinator_group_groupmetadatamanager_numgroupsstable",
-    # "kafka_coordinator_group_groupmetadatamanager_numgroupsdead",
+    "kafka_coordinator_group_groupmetadatamanager_numgroupsdead",  # Class 1: dead groups
     # Per-partition log positions (Class 4: Skewed Partition Load)
     "kafka_log_log_logendoffset",
     "kafka_log_log_logstartoffset",

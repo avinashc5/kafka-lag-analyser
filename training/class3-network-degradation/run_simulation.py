@@ -21,18 +21,17 @@ def main():
     print("Starting simulation framework for Class 3 (Network Degradation)....")
 
     subprocess.run(["docker", "compose", "up", "-d", "--build"], check=True)
-    print("Waiting 30 seconds for cluster, producer, and consumer to warm up...")
-    time.sleep(30)
+    print("Waiting 90 seconds for cluster, producer, and consumer to warm up...")
+    time.sleep(90)
 
     phases = []
-    cycles = 2
-    duration_per_phase = 10 * 60
+    cycles = 10
+    duration_per_phase = 1 * 60
 
     for cycle in range(cycles):
         print(f"\n--- Starting Cycle {cycle+1}/{cycles} ---")
 
         print("[*] Entering Healthy State")
-        set_network_delay("kafka2", enable=False)
         set_network_delay("consumer", enable=False)
         set_network_delay("producer", enable=False)
         start_time = utc_now()
@@ -40,8 +39,6 @@ def main():
         phases.append((start_time, utc_now(), "healthy", "none"))
 
         print("[*] Entering Fault State: Network Degradation")
-        # Spike inter-broker latency (affects replication lag & remote produce time)
-        set_network_delay("kafka2", delay="400ms", enable=True)
         # Spike client->broker latency (affects fetch and produce total time)
         set_network_delay("consumer", delay="200ms", enable=True)
         set_network_delay("producer", delay="200ms", enable=True)

@@ -1,7 +1,7 @@
 from kafka import KafkaConsumer
 import time
 
-BOOTSTRAP = "kafka:9092,kafka2:9092"
+BOOTSTRAP = "kafka:9092"
 
 while True:
     try:
